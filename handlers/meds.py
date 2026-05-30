@@ -18,6 +18,26 @@ _EDIT_DOSAGE_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("➡️ Оставить текущее", callback_data="keep_edit_dosage")],
     [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")],
 ])
+_EDIT_SCHEDULE_KB = InlineKeyboardMarkup([
+    [InlineKeyboardButton("➡️ Оставить текущее", callback_data="keep_edit_schedule")],
+    [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")],
+])
+
+
+def _edit_meal_keyboard(current_label: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(f"➡️ Оставить ({current_label})", callback_data="keep_edit_meal")]]
+        + [[InlineKeyboardButton(label, callback_data=f"editmeal:{key}")] for key, label in MEAL_LABELS.items()]
+        + [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")]]
+    )
+
+
+def _edit_times_keyboard(current_times: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"➡️ Оставить ({current_times} раз)", callback_data="keep_edit_times")],
+        [InlineKeyboardButton(str(i), callback_data=f"edittimes:{i}") for i in range(1, 5)],
+        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")],
+    ])
 
 
 @handle_db_errors
@@ -204,10 +224,17 @@ async def handle_edit_select(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = get_or_create_user(user.id, user.username)
     med = get_medication_by_id(medication_id, user_id)
     schedules = get_schedules_by_medication(medication_id)
+    schedule_times = [s["reminder_time"] for s in schedules]
     context.user_data["edit_id"] = medication_id
     context.user_data["edit_user_id"] = user_id
-    context.user_data["edit_med"] = {"name": med["name"], "dosage": med["dosage"]}
-    times = ", ".join([s["reminder_time"] for s in schedules])
+    context.user_data["edit_med"] = {
+        "name": med["name"],
+        "dosage": med["dosage"],
+        "meal_relation": med["meal_relation"],
+        "times_per_day": med["times_per_day"],
+        "schedules": schedule_times,
+    }
+    times = ", ".join(schedule_times)
     await query.edit_message_text(
         f"Редактируем: *{med['name']}*\n"
         f"Дозировка: {med['dosage']}\n"
@@ -236,13 +263,13 @@ async def keep_edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def keep_edit_dosage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    context.user_data["edit_dosage"] = context.user_data["edit_med"]["dosage"]
-    keyboard = [
-        [InlineKeyboardButton(label, callback_data=f"editmeal:{key}")]
-        for key, label in MEAL_LABELS.items()
-    ]
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")])
-    await query.edit_message_text("Выбери способ приёма:", reply_markup=InlineKeyboardMarkup(keyboard))
+    edit_med = context.user_data["edit_med"]
+    context.user_data["edit_dosage"] = edit_med["dosage"]
+    current_label = MEAL_LABELS.get(edit_med["meal_relation"], edit_med["meal_relation"])
+    await query.edit_message_text(
+        "Выбери способ приёма:",
+        reply_markup=_edit_meal_keyboard(current_label)
+    )
     return EDIT_MEAL
 
 
@@ -259,28 +286,37 @@ async def edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def edit_dosage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    val = update.message.text.strip()
-    context.user_data["edit_dosage"] = val
-    keyboard = [
-        [InlineKeyboardButton(label, callback_data=f"editmeal:{key}")]
-        for key, label in MEAL_LABELS.items()
-    ]
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")])
-    await update.message.reply_text("Выбери способ приёма:", reply_markup=InlineKeyboardMarkup(keyboard))
+    context.user_data["edit_dosage"] = update.message.text.strip()
+    edit_med = context.user_data["edit_med"]
+    current_label = MEAL_LABELS.get(edit_med["meal_relation"], edit_med["meal_relation"])
+    await update.message.reply_text(
+        "Выбери способ приёма:",
+        reply_markup=_edit_meal_keyboard(current_label)
+    )
     return EDIT_MEAL
+
+
+async def keep_edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    edit_med = context.user_data["edit_med"]
+    context.user_data["edit_meal"] = edit_med["meal_relation"]
+    await query.edit_message_text(
+        f"Сколько раз в день?\n_Или введи своё число:_",
+        reply_markup=_edit_times_keyboard(edit_med["times_per_day"]),
+        parse_mode="Markdown"
+    )
+    return EDIT_TIMES
 
 
 async def edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data["edit_meal"] = query.data.split(":")[1]
-    keyboard = [
-        [InlineKeyboardButton(str(i), callback_data=f"edittimes:{i}") for i in range(1, 5)],
-        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")],
-    ]
+    edit_med = context.user_data["edit_med"]
     await query.edit_message_text(
         "Сколько раз в день?\n_Или введи своё число:_",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=_edit_times_keyboard(edit_med["times_per_day"]),
         parse_mode="Markdown"
     )
     return EDIT_TIMES
@@ -292,7 +328,11 @@ async def edit_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
     times = int(query.data.split(":")[1])
     context.user_data["edit_times"] = times
     context.user_data["edit_collected"] = []
-    await query.edit_message_text(f"Введи время 1 из {times} (формат ЧЧ:ММ):", reply_markup=_CANCEL_BTN)
+    schedules_str = ", ".join(context.user_data["edit_med"]["schedules"])
+    await query.edit_message_text(
+        f"Введи время 1 из {times} (формат ЧЧ:ММ)\n(текущие: {schedules_str}):",
+        reply_markup=_EDIT_SCHEDULE_KB
+    )
     return EDIT_SCHEDULE
 
 
@@ -305,8 +345,48 @@ async def edit_times_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return EDIT_TIMES
     context.user_data["edit_times"] = times
     context.user_data["edit_collected"] = []
-    await update.message.reply_text(f"Введи время 1 из {times} (формат ЧЧ:ММ):", reply_markup=_CANCEL_BTN)
+    schedules_str = ", ".join(context.user_data["edit_med"]["schedules"])
+    await update.message.reply_text(
+        f"Введи время 1 из {times} (формат ЧЧ:ММ)\n(текущие: {schedules_str}):",
+        reply_markup=_EDIT_SCHEDULE_KB
+    )
     return EDIT_SCHEDULE
+
+
+async def keep_edit_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    edit_med = context.user_data["edit_med"]
+    context.user_data["edit_times"] = edit_med["times_per_day"]
+    context.user_data["edit_collected"] = []
+    schedules_str = ", ".join(edit_med["schedules"])
+    await query.edit_message_text(
+        f"Введи время 1 из {edit_med['times_per_day']} (формат ЧЧ:ММ)\n(текущие: {schedules_str}):",
+        reply_markup=_EDIT_SCHEDULE_KB
+    )
+    return EDIT_SCHEDULE
+
+
+@handle_db_errors
+async def keep_edit_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    edit_med = context.user_data["edit_med"]
+    collected = edit_med["schedules"]
+    user_id = context.user_data["edit_user_id"]
+    update_medication(
+        context.user_data["edit_id"], user_id,
+        context.user_data["edit_name"], context.user_data["edit_dosage"],
+        context.user_data["edit_meal"], len(collected), collected
+    )
+    await query.edit_message_text(
+        f"✅ Лекарство обновлено!\n\n"
+        f"💊 {context.user_data['edit_name']} — {context.user_data['edit_dosage']}\n"
+        f"🍽 {MEAL_LABELS[context.user_data['edit_meal']]}\n"
+        f"⏰ {', '.join(collected)}"
+    )
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 @handle_db_errors
@@ -381,12 +461,19 @@ def get_edit_handler(cancel_handler):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, edit_dosage),
                 CallbackQueryHandler(keep_edit_dosage, pattern="^keep_edit_dosage$"),
             ],
-            EDIT_MEAL: [CallbackQueryHandler(edit_meal, pattern="^editmeal:")],
+            EDIT_MEAL: [
+                CallbackQueryHandler(edit_meal, pattern="^editmeal:"),
+                CallbackQueryHandler(keep_edit_meal, pattern="^keep_edit_meal$"),
+            ],
             EDIT_TIMES: [
                 CallbackQueryHandler(edit_times, pattern="^edittimes:"),
+                CallbackQueryHandler(keep_edit_times, pattern="^keep_edit_times$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, edit_times_text),
             ],
-            EDIT_SCHEDULE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_schedule)],
+            EDIT_SCHEDULE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, edit_schedule),
+                CallbackQueryHandler(keep_edit_schedule, pattern="^keep_edit_schedule$"),
+            ],
         },
         fallbacks=[
             cancel_handler,
