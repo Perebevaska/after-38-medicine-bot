@@ -1,5 +1,5 @@
 from collections import OrderedDict, defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
@@ -22,14 +22,20 @@ async def show_stats_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user = update.effective_user
     user_id = get_or_create_user(user.id, user.username)
-    rows = get_today_stats(user_id)
+    user_tz = get_tz_for_user(user.id)
+    now = datetime.now(user_tz)
+    day_start = user_tz.localize(datetime(now.year, now.month, now.day))
+    day_start_utc = day_start.astimezone(pytz.utc)
+    day_end_utc = day_start_utc + timedelta(days=1)
+    rows = get_today_stats(
+        user_id,
+        day_start_utc.strftime("%Y-%m-%d %H:%M:%S"),
+        day_end_utc.strftime("%Y-%m-%d %H:%M:%S"),
+    )
 
     if not rows:
         await query.edit_message_text("За сегодня нет записей о приёмах.")
         return
-
-    user_tz = get_tz_for_user(user.id)
-    now = datetime.now(user_tz)
     today_str = f"{now.day} {MONTHS_GEN[now.month]}"
 
     meds = OrderedDict()
@@ -77,28 +83,26 @@ async def show_stats_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user = update.effective_user
     user_id = get_or_create_user(user.id, user.username)
-    rows = get_history_detailed(user_id, days=7)
+    user_tz = get_tz_for_user(user.id)
+    now = datetime.now(user_tz)
+    week_start = now - timedelta(days=7)
+    since_day = user_tz.localize(datetime(week_start.year, week_start.month, week_start.day))
+    since_utc = since_day.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+    rows = get_history_detailed(user_id, since_utc)
 
     if not rows:
         await query.edit_message_text("За последние 7 дней нет данных.")
         return
-
-    user_tz = get_tz_for_user(user.id)
 
     meds = OrderedDict()
     meds_totals = defaultdict(lambda: {"taken": 0, "total": 0})
 
     for r in rows:
         key = f"{r['name']} {r['dosage']}"
-        d = datetime.strptime(r["day"], "%Y-%m-%d")
-        day_str = f"{d.day} {MONTHS_SHORT[d.month-1]}"
-
-        t = r["taken_at"] or r["scheduled_time"]
-        if len(t) > 10:
-            utc_dt = datetime.strptime(t, "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.utc)
-            time_str = utc_dt.astimezone(user_tz).strftime("%H:%M")
-        else:
-            time_str = t if ":" in t else t + ":00"
+        utc_dt = datetime.strptime(r["taken_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.utc)
+        local_dt = utc_dt.astimezone(user_tz)
+        day_str = f"{local_dt.day} {MONTHS_SHORT[local_dt.month-1]}"
+        time_str = local_dt.strftime("%H:%M")
 
         icon = "✅" if r["status"] == "taken" else "❌"
 

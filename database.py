@@ -185,7 +185,7 @@ def get_all_schedules() -> list:
     with get_connection() as conn:
         return conn.execute(
             """SELECT s.reminder_time, m.name, m.dosage, m.meal_relation,
-                      u.telegram_id, s.medication_id
+                      u.telegram_id, u.timezone, u.reminder_mode, s.medication_id
                FROM schedules s
                JOIN medications m ON m.id = s.medication_id
                JOIN users u ON u.id = m.user_id
@@ -206,35 +206,34 @@ def deactivate_medication(medication_id: int, user_id: int):
         )
 
 
-def get_today_stats(user_id: int) -> list:
-    """Возвращает статистику приёмов за сегодня."""
+def get_today_stats(user_id: int, start_utc: str, end_utc: str) -> list:
+    """Возвращает статистику приёмов за сегодня (диапазон в UTC)."""
     with get_connection() as conn:
         return conn.execute(
             """SELECT m.name, m.dosage, i.scheduled_time, i.status, i.taken_at
                FROM intake_log i
                JOIN medications m ON m.id = i.medication_id
                WHERE m.user_id = ?
-               AND date(i.taken_at) = date('now')
+               AND i.taken_at >= ? AND i.taken_at < ?
                ORDER BY i.taken_at""",
-            (user_id,)
+            (user_id, start_utc, end_utc)
         ).fetchall()
 
 
-def get_history_detailed(user_id: int, days: int = 7) -> list:
-    """Возвращает детальную историю: каждый приём с датой, временем и статусом."""
+def get_history_detailed(user_id: int, since_utc: str) -> list:
+    """Возвращает детальную историю начиная с since_utc (UTC строка)."""
     with get_connection() as conn:
         return conn.execute(
             """SELECT m.name, m.dosage, m.id as med_id,
                       i.scheduled_time,
-                      date(i.taken_at) as day,
                       i.status,
                       i.taken_at
                FROM intake_log i
                JOIN medications m ON m.id = i.medication_id
                WHERE m.user_id = ?
-               AND i.taken_at >= date('now', ? || ' days')
-               ORDER BY m.name, day DESC, i.scheduled_time""",
-            (user_id, f"-{days}")
+               AND i.taken_at >= ?
+               ORDER BY m.name, i.taken_at DESC, i.scheduled_time""",
+            (user_id, since_utc)
         ).fetchall()
 
 
