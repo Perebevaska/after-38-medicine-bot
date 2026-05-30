@@ -6,8 +6,10 @@ from database import (get_or_create_user, add_medication, add_schedule,
                       get_medication_by_id, get_schedules_by_medication, update_medication)
 from constants import (NAME, DOSAGE, MEAL, TIMES, SCHEDULE,
                        EDIT_NAME, EDIT_DOSAGE, EDIT_MEAL, EDIT_TIMES, EDIT_SCHEDULE,
-                       MEAL_LABELS, CANCEL_TIP)
+                       MEAL_LABELS)
 from utils import handle_db_errors
+
+_CANCEL_BTN = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")]])
 
 
 @handle_db_errors
@@ -49,29 +51,31 @@ async def meds_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cancel_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data.clear()
+    await query.edit_message_text("Отменено.")
+    return ConversationHandler.END
+
+
 async def handle_add_med_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text(
-        f"Как называется лекарство?\n{CANCEL_TIP}",
-        parse_mode="Markdown"
-    )
+    await query.message.reply_text("Как называется лекарство?", reply_markup=_CANCEL_BTN)
     return NAME
 
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"Как называется лекарство?\n{CANCEL_TIP}",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text("Как называется лекарство?", reply_markup=_CANCEL_BTN)
     return NAME
 
 
 async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["name"] = update.message.text.strip()
     await update.message.reply_text(
-        f"Укажи дозировку (например: 500мг, 1 таблетка):\n{CANCEL_TIP}",
-        parse_mode="Markdown"
+        "Укажи дозировку (например: 500мг, 1 таблетка):",
+        reply_markup=_CANCEL_BTN
     )
     return DOSAGE
 
@@ -82,11 +86,8 @@ async def add_dosage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(label, callback_data=key)]
         for key, label in MEAL_LABELS.items()
     ]
-    await update.message.reply_text(
-        f"Как принимать?\n{CANCEL_TIP}",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")])
+    await update.message.reply_text("Как принимать?", reply_markup=InlineKeyboardMarkup(keyboard))
     return MEAL
 
 
@@ -94,11 +95,11 @@ async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data["meal"] = query.data
-    keyboard = [[InlineKeyboardButton(str(i), callback_data=str(i)) for i in range(1, 5)]]
-    await query.edit_message_text(
-        "Сколько раз в день?",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    keyboard = [
+        [InlineKeyboardButton(str(i), callback_data=str(i)) for i in range(1, 5)],
+        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")],
+    ]
+    await query.edit_message_text("Сколько раз в день?", reply_markup=InlineKeyboardMarkup(keyboard))
     return TIMES
 
 
@@ -109,8 +110,8 @@ async def add_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["times"] = times
     context.user_data["collected_times"] = []
     await query.edit_message_text(
-        f"Укажи время 1 из {times} приёмов (формат ЧЧ:ММ, например 08:00):\n{CANCEL_TIP}",
-        parse_mode="Markdown"
+        f"Укажи время 1 из {times} приёмов (формат ЧЧ:ММ, например 08:00):",
+        reply_markup=_CANCEL_BTN
     )
     return SCHEDULE
 
@@ -132,7 +133,8 @@ async def add_schedule_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(collected) < total:
         await update.message.reply_text(
             f"Время {len(collected)} из {total} принято. "
-            f"Введи время {len(collected) + 1} из {total}:"
+            f"Введи время {len(collected) + 1} из {total}:",
+            reply_markup=_CANCEL_BTN
         )
         return SCHEDULE
 
@@ -281,7 +283,10 @@ def get_add_handler(cancel_handler):
             TIMES: [CallbackQueryHandler(add_times, pattern="^[1-4]$")],
             SCHEDULE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_schedule_time)],
         },
-        fallbacks=[cancel_handler],
+        fallbacks=[
+            cancel_handler,
+            CallbackQueryHandler(cancel_add, pattern="^cancel_add$"),
+        ],
     )
 
 
