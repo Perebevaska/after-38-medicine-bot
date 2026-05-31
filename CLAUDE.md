@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## About
-Telegram бот для напоминаний о приёме лекарств с поддержкой расписания, статистики и определения часовых поясов.
+Telegram бот для напоминаний о приёме лекарств с поддержкой гибкого расписания, статистики и определения часовых поясов.
 
 ## Stack
 - **Language**: Python 3.14
@@ -20,47 +20,68 @@ med-bot/
 ├── bot.py              # точка входа — только main() + регистрация handlers
 ├── database.py         # SQLite CRUD через get_connection()
 ├── scheduler.py        # send_reminders() каждую минуту
-├── constants.py        # States, MEAL_LABELS, MONTHS_GEN
+├── constants.py        # States, MEAL_LABELS, MONTHS_GEN, MAX_MEDICATIONS_PER_USER
 ├── utils.py            # handle_db_errors, get_tz_for_user, cancel
 └── handlers/
     ├── meds.py         # add/edit/delete medications
     ├── stats.py        # stats_today, stats_week
     ├── settings.py     # settings, about, reminder_mode toggle
-    └── timezone.py     # start, timezone setup
+    └── timezone.py     # start, timezone setup, main menu
 ```
 
 ### Схема БД
-4 таблицы:
+5 таблиц:
 - `users` (telegram_id, username, timezone, reminder_mode)
 - `medications` (user_id FK, name, dosage, meal_relation, times_per_day, active)
-- `schedules` (medication_id FK, reminder_time HH:MM)
+- `schedules` (medication_id FK, reminder_time HH:MM) — устаревшая, оставлена для совместимости
+- `schedule_rules` (medication_id FK, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date)
 - `intake_log` (medication_id FK, scheduled_time, taken_at, status: taken/skipped/pending)
 
+### schedule_rules — типы frequency
+| frequency | поля | описание |
+|-----------|------|----------|
+| `daily` | — | каждый день |
+| `interval` | `interval_days`, `anchor_date` | каждые N дней от anchor_date |
+| `weekdays` | `weekdays` | по дням недели, '1,3,5' (пн=1, вс=7) |
+| `monthly` | `month_day` | раз в месяц, N-го числа |
+
 ### Поток данных
-1. Пользователь добавляет лекарство → `handlers/meds.py` → `database.add_medication()` + `database.add_schedule()`
-2. APScheduler каждую минуту → `scheduler.send_reminders()` → InlineKeyboard с ✅/❌
-3. Нажатие кнопки → `scheduler.handle_intake_callback()` → `database.log_intake()`
+1. Пользователь добавляет лекарство → `handlers/meds.py` → `database.add_medication()` + `database.add_schedule_rule()`
+2. APScheduler каждую минуту → `scheduler.send_reminders()` → проверяет `_rule_fires_today()` → InlineKeyboard с ✅/❌
+3. Нажатие кнопки → `scheduler.handle_intake_callback()` → `database.log_intake()` (upsert)
+
+### Флоу добавления лекарства
+```
+Название → Дозировка → Сколько раз в день → Время × N → Как принимать с пищей → Тип расписания:
+  📅 Каждый день   → сохранить
+  🔄 Через N дней  → N дней → сохранить
+  📆 По дням недели → Дни (toggle) → сохранить
+  🗓 Раз в месяц   → Число → сохранить
+```
+
+Время всегда собирается сразу после "сколько раз", до выбора типа расписания.
+Каждое время сохраняется отдельной строкой в `schedule_rules` с одинаковыми frequency-параметрами.
+
+### Флоу редактирования лекарства
+```
+Название → Дозировка → Тип расписания:
+  Оставить расписание → сохранить (имя/дозировка, прочее без изменений)
+  Каждый день / Через N / По дням / Раз в месяц →
+    Кол-во раз → Время × N → Как принимать с пищей →
+      Каждый день   → сохранить
+      Через N дней  → N дней → сохранить
+      По дням недели → Дни → сохранить
+      Раз в месяц   → Число → сохранить
+```
 
 ### Handler Pattern
-Каждый модуль в `handlers/` экспортирует функции-фабрики, которые возвращают готовые handler-объекты:
-
 ```python
-# Одиночный handler:
 app.add_handler(settings.get_handler())
-
-# Список handlers:
 for h in stats.get_handlers():
     app.add_handler(h)
-
-# ConversationHandler с несколькими шагами:
 app.add_handler(meds.get_add_handler(cancel_handler))
-
-# Исключение — timezone собирается вручную в bot.py:
-setup_tz_handler = ConversationHandler(
-    entry_points=[CommandHandler("start", tz_handler.start), ...],
-    states={SETUP_TZ: [...], SETUP_CITY: [...]},
-    fallbacks=[cancel_handler]
-)
+app.add_handler(meds.get_edit_handler(cancel_handler))
+app.add_handler(CallbackQueryHandler(tz_handler.handle_menu_callback, pattern="^menu:"))
 ```
 
 ### utils.py
@@ -80,6 +101,7 @@ pip install -r requirements.txt
 
 # Миграция БД (при изменении схемы)
 # database.migrate() вызывается автоматически в bot.py при старте
+# Автоматически переносит schedules → schedule_rules с frequency='daily'
 ```
 
 ## Conversational States
@@ -87,6 +109,10 @@ pip install -r requirements.txt
 - `NAME, DOSAGE, MEAL, TIMES, SCHEDULE` (0-4) — добавление лекарства
 - `EDIT_NAME, EDIT_DOSAGE, EDIT_MEAL, EDIT_TIMES, EDIT_SCHEDULE` (5-9) — редактирование
 - `SETUP_TZ, SETUP_CITY` (10-11) — настройка часового пояса
+- `FREQ_TYPE, FREQ_INTERVAL, FREQ_WEEKDAYS, FREQ_MONTHDAY` (12-15) — тип расписания при добавлении
+- `EDIT_FREQ_TYPE, EDIT_FREQ_INTERVAL, EDIT_FREQ_WEEKDAYS, EDIT_FREQ_MONTHDAY` (17-20) — тип расписания при редактировании
+
+Примечание: `FREQ_TIME` (16) и `EDIT_FREQ_TIME` (21) определены в constants.py для совместимости, но не используются в handlers — время собирается в SCHEDULE/EDIT_SCHEDULE до выбора типа расписания.
 
 Все диалоги поддерживают `/cancel` для выхода.
 
@@ -108,6 +134,13 @@ TIMEZONE=Asia/Yekaterinburg
 - Часовой пояс запрашивается при `/start` если не задан (геолокация или город)
 - Напоминания в local time пользователя (хранится в `users.timezone`)
 - Режим напоминаний: `once` или `repeat` (каждые 5 минут до подтверждения)
+- Лимит лекарств: `MAX_MEDICATIONS_PER_USER = 10` (задан в `constants.py`)
+- Главное меню `/start` — inline-кнопки (💊 Мои лекарства, 📊 Статистика, ⚙️ Настройки, ℹ️ О проекте)
+- `log_intake` — upsert: при повторном нажатии обновляет запись за сегодня вместо дубля
+- При удалении лекарства `clear_pending_for_medication()` сразу чистит `_pending` в scheduler
+- Время нормализуется через `_parse_time()` → формат `ЧЧ:ММ` с ведущим нулём (гарантирует совпадение с `strftime("%H:%M")` в планировщике)
+- `handle_intake_callback` парсит `callback_data` как `status:med_id:HH:MM` → время восстанавливается через `":".join(parts[2:])`
+- **Перезапуск после рефакторинга обязателен**: ConversationHandler хранит состояния в памяти; старые сессии могут блокировать новые handlers до перезапуска
 
 ## Known Issues & Bug Tracker
 
@@ -123,14 +156,18 @@ TIMEZONE=Asia/Yekaterinburg
 | 6 | `handlers/meds.py` | Лишние DB-запросы в цепочке edit (`get_or_create_user` × 5) |
 | 7 | `scheduler.py` | `handle_intake_callback` без try/except вокруг `log_intake` |
 | 8 | `handlers/meds.py` | TIMES/MEAL состояния без паттернов — ловили любой callback (в т.ч. `add_med`) |
+| 9 | `database.py` | `log_intake` делал `INSERT` при каждом нажатии — теперь upsert по (medication_id, scheduled_time, date) |
+| 10 | `scheduler.py` | Ключи удалённых лекарств висели в `_pending` — теперь очищаются через `clear_pending_for_medication()` |
+| 11 | `handlers/meds.py` | При смене количества приёмов показывались старые времена в подсказке |
+| 12 | `scheduler.py` | `handle_intake_callback` брал `parts[2]` как время — обрезал минуты (`"09:30"` → `"09"`) |
+| 13 | `handlers/meds.py` | `_check_time` не нормализовал формат — `"9:5"` хранилось и никогда не совпадало с `"09:05"` |
+| 14 | `handlers/timezone.py` | `handle_menu_callback` не был обёрнут в `@handle_db_errors` |
+| 15 | `handlers/meds.py` | `keep_edit_schedule` не показывал `🔢 X раз в день` в подтверждении |
+| 16 | `handlers/meds.py` | Мёртвый код `add_freq_time` / `edit_freq_time` (убраны из states, но остались в файле) |
 
 ### 🔲 К исправлению
 
-| # | Файл | Строка | Проблема | Приоритет |
-|---|------|--------|----------|-----------|
-| 9 | `database.py`, `scheduler.py` | `log_intake()` | `log_intake` делает `INSERT` при каждом нажатии — дубли если нажать дважды или repeat прислал повтор | Средний |
-| 10 | `scheduler.py` | `_pending` dict | Ключи удалённых лекарств висят в `_pending` до 2 часов | Низкий |
-| 11 | `handlers/meds.py` | `keep_edit_times` | При смене количества приёмов показываются старые времена в подсказке — может запутать | Низкий (UX) |
+Багов нет.
 
 ### Порядок работы с багами
 1. Найти баг → добавить в таблицу "К исправлению"
