@@ -79,9 +79,14 @@ async def handle_menu_callback(update, context):
     elif action == "about":
         await msg.reply_text(
             "ℹ️ *О проекте*\n\n"
-            "Этот бот — вайб-кодинг проект: написан за один вечер в паре с AI (Claude).\n\n"
+            "After 30 Med Bot — вайб-кодинг проект: написан в паре с AI (Claude).\n"
             "Код живой, рабочий, итерируем дальше 🚀\n\n"
-            "📦 GitHub: [after-38-medicine-bot](https://github.com/Perebevaska/after-38-medicine-bot)",
+            "📦 [GitHub](https://github.com/Perebevaska/after-38-medicine-bot)\n\n"
+            "*В планах:*\n"
+            "💊 Напоминание о пополнении запаса таблеток\n"
+            "👨‍👩‍👧 Caregiver режим — следить за приёмами другого пользователя\n"
+            "📄 Экспорт истории в PDF\n"
+            "📱 Telegram Mini App",
             parse_mode="Markdown",
             disable_web_page_preview=True
         )
