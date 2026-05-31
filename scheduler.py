@@ -3,6 +3,7 @@ from datetime import datetime, date
 import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from database import get_all_schedules, log_intake, get_users_with_daily_plan
+from utils import escape_md
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +87,13 @@ async def send_reminders(app):
             ),
         ]])
 
+        dosage = row["rule_dosage"] or row["med_dosage"]
         try:
             await app.bot.send_message(
                 chat_id=row["telegram_id"],
                 text=(
                     f"💊 Время принять лекарство!\n\n"
-                    f"*{row['name']}* — {row['dosage']}\n"
+                    f"*{escape_md(row['name'])}* — {escape_md(dosage)}\n"
                     f"🍽 Принимать {_MEAL_LABELS.get(row['meal_relation'], row['meal_relation'])}"
                 ),
                 parse_mode="Markdown",
@@ -106,7 +108,7 @@ async def send_reminders(app):
 
 
 async def _send_daily_plans(app):
-    """Отправляет утренний план дня пользователям у которых подошло время."""
+    """Отправляет утренний план дня пользователям, у которых наступило время plan_time."""
     rows = get_users_with_daily_plan()
     if not rows:
         return
@@ -119,20 +121,25 @@ async def _send_daily_plans(app):
                 tz = pytz.timezone(row["timezone"] or "UTC")
             except Exception:
                 tz = pytz.utc
-            users[tid] = {"tz": tz, "plan_time": row["daily_plan_time"] or "08:00", "meds": {}}
+            now_local = datetime.now(tz)
+            users[tid] = {
+                "tz": tz,
+                "now_local": now_local,
+                "plan_time": row["daily_plan_time"] or "08:00",
+                "meds": {},
+            }
         mid = row["medication_id"]
-        now_local = datetime.now(users[tid]["tz"])
-        if not _rule_fires_today(row, now_local.date()):
+        if not _rule_fires_today(row, users[tid]["now_local"].date()):
             continue
         if mid not in users[tid]["meds"]:
             users[tid]["meds"][mid] = {
-                "name": row["name"], "dosage": row["dosage"],
-                "meal_relation": row["meal_relation"], "times": [],
+                "name": row["name"], "meal_relation": row["meal_relation"], "times": [],
             }
-        users[tid]["meds"][mid]["times"].append(row["reminder_time"])
+        dosage = row["rule_dosage"] or row["med_dosage"]
+        users[tid]["meds"][mid]["times"].append((row["reminder_time"], dosage))
 
     for tid, data in users.items():
-        now_local = datetime.now(data["tz"])
+        now_local = data["now_local"]
         if now_local.strftime("%H:%M") != data["plan_time"]:
             continue
         plan_key = (tid, now_local.date().isoformat())
@@ -143,10 +150,10 @@ async def _send_daily_plans(app):
 
         lines = ["🌅 *Доброе утро!*\n", "📋 *Сегодня нужно принять:*\n"]
         for med in data["meds"].values():
-            times_str = ", ".join(sorted(med["times"]))
             meal = _MEAL_LABELS.get(med["meal_relation"], "")
-            lines.append(f"💊 *{med['name']}* — {med['dosage']}")
-            lines.append(f"   ⏰ {times_str} — {meal}")
+            lines.append(f"💊 *{escape_md(med['name'])}*")
+            for reminder_time, dosage in sorted(med["times"]):
+                lines.append(f"   ⏰ {reminder_time} — {escape_md(dosage)} — {meal}")
         lines.append("\nНе забудь взять лекарства с собой! 🎒")
         lines.append("Продуктивного дня! 🚀")
 
@@ -163,7 +170,11 @@ async def _send_daily_plans(app):
 
 
 async def handle_intake_callback(update, context):
-    """Обрабатывает нажатие кнопки Принял/Пропустил."""
+    """Обрабатывает нажатие кнопок ✅ Принял / ❌ Пропустить в напоминании.
+
+    Парсит callback_data формата «status:medication_id:HH:MM»,
+    записывает приём в intake_log и убирает ключ из _pending.
+    """
     query = update.callback_query
     await query.answer()
 

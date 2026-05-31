@@ -15,7 +15,7 @@ from database import init_db, migrate
 from scheduler import send_reminders, handle_intake_callback
 from handlers import meds
 from handlers import timezone as tz_handler
-from handlers import stats, settings, admin
+from handlers import stats, settings, admin, export
 from utils import cancel
 from constants import SETUP_TZ, SETUP_CITY
 
@@ -25,11 +25,13 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("fontTools").setLevel(logging.WARNING)
 warnings.filterwarnings("ignore", category=PTBUserWarning)
 logger = logging.getLogger(__name__)
 
 
 async def post_init(app):
+    """Регистрирует команды бота в меню Telegram после запуска."""
     await app.bot.set_my_commands([
         BotCommand("start",    "🏠 Главное меню"),
         BotCommand("meds",     "💊 Мои лекарства"),
@@ -41,6 +43,7 @@ async def post_init(app):
 
 
 async def error_handler(update, context):
+    """Глобальный обработчик ошибок: игнорирует транзиентные сетевые ошибки Telegram."""
     if isinstance(context.error, (TimedOut, NetworkError)):
         logger.warning("Telegram network error (transient): %s", context.error)
         return
@@ -48,6 +51,7 @@ async def error_handler(update, context):
 
 
 def main():
+    """Точка входа: инициализирует БД, регистрирует все handlers, запускает бота."""
     init_db()
     migrate()
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
@@ -81,6 +85,8 @@ def main():
     app.add_handler(CommandHandler("settings", settings.settings_command))
     app.add_handler(CommandHandler("about", settings.about_command))
     for h in stats.get_handlers():
+        app.add_handler(h)
+    for h in export.get_handlers():
         app.add_handler(h)
     app.add_handler(settings.get_handler())
     app.add_handler(settings.get_preset_handler(cancel_handler))

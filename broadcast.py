@@ -19,13 +19,19 @@ DB_PATH = "med_bot.db"
 
 
 def get_all_user_ids() -> list[int]:
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT telegram_id FROM users").fetchall()
-    conn.close()
-    return [r[0] for r in rows]
+    """Возвращает список всех telegram_id из БД; при ошибке — пустой список."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute("SELECT telegram_id FROM users").fetchall()
+        conn.close()
+        return [r[0] for r in rows]
+    except sqlite3.Error as e:
+        print(f"Ошибка БД: {e}")
+        return []
 
 
 def read_message_text() -> str:
+    """Считывает многострочный текст сообщения; ввод завершается строкой «.»."""
     print("Введи текст сообщения. Строка с одной точкой «.» — завершить ввод.")
     print("Поддерживается HTML: <b>жирный</b>, <i>курсив</i>, <code>код</code>")
     print("-" * 40)
@@ -39,6 +45,7 @@ def read_message_text() -> str:
 
 
 async def send_broadcast(targets: list[int], text: str):
+    """Отправляет text всем telegram_id из targets; логирует успех/ошибки для каждого."""
     bot = Bot(BOT_TOKEN)
     ok = 0
     fail = 0
@@ -56,6 +63,7 @@ async def send_broadcast(targets: list[int], text: str):
 
 
 def main():
+    """Интерактивный CLI рассылки: ввод текста → выбор аудитории → подтверждение → отправка."""
     print("=" * 40)
     print("       РАССЫЛКА — After 30 Med Bot")
     print("=" * 40)

@@ -4,11 +4,15 @@ from telegram.ext import ContextTypes
 from database import get_admin_stats
 from utils import handle_db_errors
 
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+try:
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+except ValueError:
+    ADMIN_ID = 0
 
 
 @handle_db_errors
 async def handle_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает админ-панель со статистикой; доступна только ADMIN_ID."""
     query = update.callback_query
     if update.effective_user.id != ADMIN_ID:
         await query.answer("Доступ запрещён.", show_alert=True)
@@ -32,6 +36,7 @@ async def handle_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 @handle_db_errors
 async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат с админ-панели на страницу настроек."""
     query = update.callback_query
     await query.answer()
     from handlers.settings import _settings_text, _settings_keyboard, fetch_settings_data

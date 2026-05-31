@@ -10,10 +10,14 @@ from scheduler import clear_pending_for_medication
 from constants import PRESET_TIME, DAILY_PLAN_TIME, SLOT_ORDER, SLOT_LABELS
 from utils import handle_db_errors, parse_time
 
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+try:
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+except ValueError:
+    ADMIN_ID = 0
 
 
 def _settings_text(tz: str, mode_label: str, presets: dict, daily_plan: dict) -> str:
+    """Формирует текст страницы настроек с описанием всех параметров."""
     p = presets
     presets_line = f"🌅{p['morning']}  ☀️{p['lunch']}  🌇{p['evening']}  🌙{p['night']}"
     dp_line = f"✅ Вкл — {daily_plan['time']}" if daily_plan["enabled"] else "❌ Выкл"
@@ -33,6 +37,7 @@ def _settings_text(tz: str, mode_label: str, presets: dict, daily_plan: dict) ->
 
 
 def _settings_keyboard(mode_label: str, daily_plan: dict, telegram_id: int = 0) -> InlineKeyboardMarkup:
+    """Inline-клавиатура настроек; добавляет кнопку Админ панели если telegram_id == ADMIN_ID."""
     dp_label = (
         f"📋 План на день: ✅ {daily_plan['time']}"
         if daily_plan["enabled"]
@@ -51,6 +56,7 @@ def _settings_keyboard(mode_label: str, daily_plan: dict, telegram_id: int = 0) 
 
 
 def _daily_plan_keyboard(dp: dict) -> InlineKeyboardMarkup:
+    """Inline-клавиатура настроек плана дня (вкл/выкл, время отправки, назад)."""
     toggle_label = "✅ Включён — нажми чтобы выключить" if dp["enabled"] else "❌ Выключен — нажми чтобы включить"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(toggle_label, callback_data="daily_plan:toggle")],
@@ -70,6 +76,7 @@ def fetch_settings_data(telegram_id: int) -> tuple:
 
 
 def _presets_keyboard(presets: dict) -> InlineKeyboardMarkup:
+    """Inline-клавиатура редактирования временных пресетов (Утро/Обед/Вечер/Ночь)."""
     rows = []
     for slot in SLOT_ORDER:
         rows.append([InlineKeyboardButton(
@@ -81,6 +88,7 @@ def _presets_keyboard(presets: dict) -> InlineKeyboardMarkup:
 
 @handle_db_errors
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик /settings: показывает текущие настройки пользователя."""
     user = update.effective_user
     tz, mode_label, presets, dp = fetch_settings_data(user.id)
     await update.message.reply_text(
@@ -92,6 +100,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @handle_db_errors
 async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Переключает режим напоминаний once ↔ repeat и обновляет страницу настроек."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -108,6 +117,7 @@ async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT
 
 @handle_db_errors
 async def handle_show_presets(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает страницу редактирования временных пресетов приёма."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -121,6 +131,7 @@ async def handle_show_presets(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 @handle_db_errors
 async def handle_preset_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает выбор слота пресета (preset:morning/lunch/evening/night), запрашивает новое время."""
     query = update.callback_query
     await query.answer()
     slot = query.data.split(":")[1]
@@ -138,6 +149,7 @@ async def handle_preset_select(update: Update, context: ContextTypes.DEFAULT_TYP
 
 @handle_db_errors
 async def handle_preset_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Принимает ввод нового времени пресета, валидирует и сохраняет."""
     try:
         time_str = parse_time(update.message.text.strip())
     except ValueError:
@@ -158,6 +170,7 @@ async def handle_preset_time_input(update: Update, context: ContextTypes.DEFAULT
 
 
 async def cancel_preset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменяет редактирование пресета и закрывает диалог."""
     query = update.callback_query
     await query.answer()
     context.user_data.clear()
@@ -168,17 +181,19 @@ async def cancel_preset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ── Daily plan handlers ────────────────────────────────────────────────────
 
 def _daily_plan_text(dp: dict) -> str:
+    """Формирует текст страницы настройки плана дня."""
     status = "✅ Включён" if dp["enabled"] else "❌ Выключен"
     return (
         f"📋 *План на день*\n\n"
         f"Статус: {status}\n"
         f"Время отправки: {dp['time']}\n\n"
-        f"Каждое утро бот пришлёт список лекарств, которые нужно принять сегодня."
+        f"Бот присылает список лекарств, которые сегодня нужно принять."
     )
 
 
 @handle_db_errors
 async def handle_daily_plan_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Открывает страницу настроек плана дня."""
     query = update.callback_query
     await query.answer()
     dp = get_daily_plan_settings(update.effective_user.id)
@@ -191,6 +206,7 @@ async def handle_daily_plan_settings(update: Update, context: ContextTypes.DEFAU
 
 @handle_db_errors
 async def handle_daily_plan_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Переключает план дня вкл/выкл и обновляет страницу настроек."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -206,6 +222,7 @@ async def handle_daily_plan_toggle(update: Update, context: ContextTypes.DEFAULT
 
 @handle_db_errors
 async def handle_daily_plan_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат со страницы плана дня на главную страницу настроек."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -219,6 +236,7 @@ async def handle_daily_plan_back(update: Update, context: ContextTypes.DEFAULT_T
 
 @handle_db_errors
 async def handle_daily_plan_time_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запрашивает ввод нового времени отправки плана дня."""
     query = update.callback_query
     await query.answer()
     dp = get_daily_plan_settings(update.effective_user.id)
@@ -234,6 +252,7 @@ async def handle_daily_plan_time_select(update: Update, context: ContextTypes.DE
 
 @handle_db_errors
 async def handle_daily_plan_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Принимает ввод времени плана дня, валидирует и сохраняет."""
     try:
         time_str = parse_time(update.message.text.strip())
     except ValueError:
@@ -252,6 +271,7 @@ async def handle_daily_plan_time_input(update: Update, context: ContextTypes.DEF
 
 
 async def cancel_daily_plan_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменяет ввод времени плана дня и возвращается на страницу плана."""
     query = update.callback_query
     await query.answer()
     dp = get_daily_plan_settings(update.effective_user.id)
@@ -268,6 +288,7 @@ async def cancel_daily_plan_time(update: Update, context: ContextTypes.DEFAULT_T
 
 @handle_db_errors
 async def handle_delete_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает запрос подтверждения полного удаления данных пользователя."""
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
@@ -287,6 +308,7 @@ async def handle_delete_request(update: Update, context: ContextTypes.DEFAULT_TY
 
 @handle_db_errors
 async def handle_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Удаляет все данные пользователя и очищает pending-напоминания."""
     query = update.callback_query
     await query.answer()
     telegram_id = update.effective_user.id
@@ -300,6 +322,7 @@ async def handle_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TY
 
 @handle_db_errors
 async def handle_delete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменяет удаление данных и возвращается на страницу настроек."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -312,6 +335,7 @@ async def handle_delete_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик /about: показывает информацию о проекте и планах развития."""
     await update.message.reply_text(
         "ℹ️ *О проекте*\n\n"
         "After 30 Med Bot — вайб-кодинг проект: написан в паре с AI (Claude).\n"
@@ -320,7 +344,6 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*В планах:*\n"
         "💊 Напоминание о пополнении запаса таблеток\n"
         "👨‍👩‍👧 Caregiver режим — следить за приёмами другого пользователя\n"
-        "📄 Экспорт истории в PDF\n"
         "📱 Telegram Mini App",
         parse_mode="Markdown",
         disable_web_page_preview=True
@@ -330,10 +353,12 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ── Handler factories ──────────────────────────────────────────────────────
 
 def get_handler():
+    """Возвращает handler для переключения режима напоминаний."""
     return CallbackQueryHandler(handle_reminder_callback, pattern="^settings:reminder$")
 
 
 def get_preset_handler(cancel_handler):
+    """Возвращает ConversationHandler для редактирования временных пресетов."""
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(handle_preset_select, pattern="^preset:")],
         states={
@@ -347,6 +372,7 @@ def get_preset_handler(cancel_handler):
 
 
 def get_daily_plan_time_handler(cancel_handler):
+    """Возвращает ConversationHandler для ввода времени плана дня."""
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(handle_daily_plan_time_select, pattern="^settings:daily_plan_time$")],
         states={

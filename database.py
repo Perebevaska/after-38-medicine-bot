@@ -72,13 +72,6 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
 
-            CREATE TABLE IF NOT EXISTS schedules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                medication_id INTEGER NOT NULL,
-                reminder_time TEXT NOT NULL,
-                FOREIGN KEY (medication_id) REFERENCES medications(id)
-            );
-
             CREATE TABLE IF NOT EXISTS intake_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 medication_id INTEGER NOT NULL,
@@ -122,17 +115,12 @@ def migrate():
         if "daily_plan_time" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN daily_plan_time TEXT DEFAULT '08:00'")
 
-        # Мигрируем schedules → schedule_rules
-        existing = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_rules'"
-        ).fetchone()
-        if existing:
-            count = conn.execute("SELECT COUNT(*) FROM schedule_rules").fetchone()[0]
-            if count == 0:
-                conn.execute("""
-                    INSERT INTO schedule_rules (medication_id, reminder_time, frequency)
-                    SELECT medication_id, reminder_time, 'daily' FROM schedules
-                """)
+        sr_cols = [r[1] for r in conn.execute("PRAGMA table_info(schedule_rules)")]
+        if "dosage" not in sr_cols:
+            conn.execute("ALTER TABLE schedule_rules ADD COLUMN dosage TEXT DEFAULT NULL")
+
+        # Дропаем устаревшую таблицу schedules (данные давно в schedule_rules)
+        conn.execute("DROP TABLE IF EXISTS schedules")
 
 
 def get_or_create_user(telegram_id: int, username: str = None) -> int:
@@ -245,14 +233,14 @@ def add_schedule(medication_id: int, reminder_time: str):
 
 def add_schedule_rule(medication_id: int, reminder_time: str, frequency: str,
                       interval_days: int = None, weekdays: str = None,
-                      month_day: int = None, anchor_date: str = None):
+                      month_day: int = None, anchor_date: str = None, dosage: str = None):
     """Добавляет правило напоминания в schedule_rules."""
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO schedule_rules
-               (medication_id, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (medication_id, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date)
+               (medication_id, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date, dosage)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (medication_id, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date, dosage)
         )
 
 
@@ -271,8 +259,9 @@ def get_all_schedules() -> list:
         return conn.execute(
             """SELECT sr.reminder_time, sr.frequency, sr.interval_days,
                       sr.weekdays, sr.month_day, sr.anchor_date,
-                      m.name, m.dosage, m.meal_relation,
-                      u.telegram_id, u.timezone, u.reminder_mode, sr.medication_id
+                      m.name, m.dosage AS med_dosage, m.meal_relation,
+                      u.telegram_id, u.timezone, u.reminder_mode, sr.medication_id,
+                      sr.dosage AS rule_dosage
                FROM schedule_rules sr
                JOIN medications m ON m.id = sr.medication_id
                JOIN users u ON u.id = m.user_id
@@ -374,7 +363,7 @@ def get_schedules_by_medication(medication_id: int) -> list:
     """Возвращает правила расписания для лекарства."""
     with get_connection() as conn:
         return conn.execute(
-            """SELECT reminder_time, frequency, interval_days, weekdays, month_day, anchor_date
+            """SELECT reminder_time, frequency, interval_days, weekdays, month_day, anchor_date, dosage
                FROM schedule_rules WHERE medication_id = ?""",
             (medication_id,)
         ).fetchall()
@@ -393,11 +382,11 @@ def update_medication(medication_id: int, user_id: int, name: str, dosage: str,
         for rule in new_rules:
             conn.execute(
                 """INSERT INTO schedule_rules
-                   (medication_id, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (medication_id, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date, dosage)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (medication_id, rule["reminder_time"], rule.get("frequency", "daily"),
                  rule.get("interval_days"), rule.get("weekdays"),
-                 rule.get("month_day"), rule.get("anchor_date"))
+                 rule.get("month_day"), rule.get("anchor_date"), rule.get("dosage"))
             )
 
 
@@ -431,14 +420,31 @@ def set_daily_plan_time(telegram_id: int, time_str: str):
         )
 
 
+def get_schedules_for_user(telegram_id: int) -> list:
+    """Возвращает все активные правила расписания для одного пользователя."""
+    with get_connection() as conn:
+        return conn.execute(
+            """SELECT u.telegram_id, u.timezone,
+                      m.id AS medication_id, m.name, m.dosage AS med_dosage, m.meal_relation,
+                      sr.reminder_time, sr.frequency, sr.interval_days,
+                      sr.weekdays, sr.month_day, sr.anchor_date, sr.dosage AS rule_dosage
+               FROM users u
+               JOIN medications m ON m.user_id = u.id AND m.active = 1
+               JOIN schedule_rules sr ON sr.medication_id = m.id
+               WHERE u.telegram_id = ?
+               ORDER BY m.id, sr.reminder_time""",
+            (telegram_id,)
+        ).fetchall()
+
+
 def get_users_with_daily_plan() -> list:
     """Возвращает строки schedule_rules для пользователей с включённым планом дня."""
     with get_connection() as conn:
         return conn.execute(
             """SELECT u.telegram_id, u.timezone, u.daily_plan_time,
-                      m.id AS medication_id, m.name, m.dosage, m.meal_relation,
+                      m.id AS medication_id, m.name, m.dosage AS med_dosage, m.meal_relation,
                       sr.reminder_time, sr.frequency, sr.interval_days,
-                      sr.weekdays, sr.month_day, sr.anchor_date
+                      sr.weekdays, sr.month_day, sr.anchor_date, sr.dosage AS rule_dosage
                FROM users u
                JOIN medications m ON m.user_id = u.id AND m.active = 1
                JOIN schedule_rules sr ON sr.medication_id = m.id
@@ -463,7 +469,6 @@ def delete_user_data(telegram_id: int) -> list:
             placeholders = ",".join("?" * len(med_ids))
             conn.execute(f"DELETE FROM intake_log WHERE medication_id IN ({placeholders})", med_ids)
             conn.execute(f"DELETE FROM schedule_rules WHERE medication_id IN ({placeholders})", med_ids)
-            conn.execute(f"DELETE FROM schedules WHERE medication_id IN ({placeholders})", med_ids)
             conn.execute("DELETE FROM medications WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE telegram_id = ?", (telegram_id,))
         return med_ids
@@ -482,6 +487,20 @@ def get_admin_stats() -> dict:
                WHERE date(i.taken_at) = date('now')"""
         ).fetchone()[0]
         return {"total_users": total_users, "total_meds": total_meds, "active_today": active_today}
+
+
+def get_today_intake_statuses(telegram_id: int) -> dict:
+    """Возвращает {(medication_id, scheduled_time): status} для сегодняшних записей."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT i.medication_id, i.scheduled_time, i.status
+               FROM intake_log i
+               JOIN medications m ON m.id = i.medication_id
+               JOIN users u ON u.id = m.user_id
+               WHERE u.telegram_id = ? AND date(i.taken_at) = date('now')""",
+            (telegram_id,)
+        ).fetchall()
+    return {(r["medication_id"], r["scheduled_time"]): r["status"] for r in rows}
 
 
 def log_intake(medication_id: int, scheduled_time: str, status: str):

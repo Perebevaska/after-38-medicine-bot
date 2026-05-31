@@ -1,23 +1,28 @@
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pytz
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
-from database import get_or_create_user, get_today_stats, get_history_detailed
+from database import get_or_create_user, get_today_stats, get_history_detailed, get_schedules_for_user
 from constants import MONTHS_GEN, MONTHS_SHORT
 from utils import handle_db_errors, get_tz_for_user
+from scheduler import _rule_fires_today
+
+_WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("📅 За сегодня", callback_data="stats:today"),
-        InlineKeyboardButton("📈 За 7 дней", callback_data="stats:week"),
-    ]])
+    """Обработчик /stats: показывает выбор периода статистики."""
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📈 За 7 дней", callback_data="stats:week")],
+        [InlineKeyboardButton("📆 План на 7 дней", callback_data="stats:plan")],
+    ])
     await update.message.reply_text("Выбери период:", reply_markup=keyboard)
 
 
 @handle_db_errors
 async def show_stats_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает статистику приёмов за сегодня с процентом выполнения."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -79,6 +84,7 @@ async def show_stats_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @handle_db_errors
 async def show_stats_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает детальную историю приёмов за последние 7 дней с кнопкой PDF."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -132,11 +138,72 @@ async def show_stats_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "\n".join(blocks)
     if len(text) > 4000:
         text = text[:3900] + "\n\n⚠️ <i>Показаны не все данные — слишком большая история.</i>"
-    await query.edit_message_text(text, parse_mode="HTML")
+    await query.edit_message_text(
+        text, parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("📄 Скачать PDF", callback_data="export:week")
+        ]])
+    )
+
+
+@handle_db_errors
+async def show_week_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает план лекарств на ближайшие 7 дней с учётом frequency, с кнопкой PDF."""
+    query = update.callback_query
+    await query.answer()
+    user = update.effective_user
+    user_tz = get_tz_for_user(user.id)
+    today = datetime.now(user_tz).date()
+
+    rows = get_schedules_for_user(user.id)
+    if not rows:
+        await query.edit_message_text("💊 Нет активных лекарств.")
+        return
+
+    blocks = ["📆 <b>План на 7 дней</b>\n"]
+    for offset in range(7):
+        day = today + timedelta(days=offset)
+        day_label = f"{day.day} {MONTHS_SHORT[day.month - 1]} ({_WEEKDAY_NAMES[day.weekday()]})"
+
+        meds: dict = {}
+        for row in rows:
+            if not _rule_fires_today(row, day):
+                continue
+            mid = row["medication_id"]
+            if mid not in meds:
+                meds[mid] = {"name": row["name"], "times": []}
+            dosage = row["rule_dosage"] or row["med_dosage"]
+            meds[mid]["times"].append((row["reminder_time"], dosage))
+
+        if not meds:
+            continue
+
+        blocks.append(f"📅 <b>{day_label}</b>")
+        for med in meds.values():
+            times_str = "  ".join(
+                f"{t} — {d}" for t, d in sorted(med["times"])
+            )
+            blocks.append(f"  💊 {med['name']}: {times_str}")
+        blocks.append("")
+
+    if len(blocks) == 2:
+        await query.edit_message_text("💊 В ближайшие 7 дней нет запланированных лекарств.")
+        return
+
+    text = "\n".join(blocks).rstrip()
+    if len(text) > 4000:
+        text = text[:3900] + "\n\n⚠️ <i>Показаны не все данные.</i>"
+    await query.edit_message_text(
+        text, parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("📄 Скачать PDF", callback_data="export:plan")
+        ]])
+    )
 
 
 def get_handlers():
+    """Возвращает список handlers для страниц статистики."""
     return [
-        CallbackQueryHandler(show_stats_today, pattern="^stats:today$"),
         CallbackQueryHandler(show_stats_week, pattern="^stats:week$"),
+        CallbackQueryHandler(show_week_plan, pattern="^stats:plan$"),
     ]
