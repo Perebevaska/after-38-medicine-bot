@@ -261,23 +261,24 @@ async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data["meal"] = query.data
-    await query.edit_message_text("Тип расписания:", reply_markup=_freq_type_keyboard())
+    await query.edit_message_text("📅 *Тип расписания* — выбери:",
+                                  parse_mode="Markdown", reply_markup=_freq_type_keyboard())
     return FREQ_TYPE
 
 
-# ── Add flow: standard daily ───────────────────────────────────────────────
+# ── Add flow: times → schedule ─────────────────────────────────────────────
 
 async def add_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    context.user_data["times"] = int(query.data)
-    keyboard = [
-        [InlineKeyboardButton(label, callback_data=key)]
-        for key, label in MEAL_LABELS.items()
-    ]
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")])
-    await query.edit_message_text("Как принимать с пищей?", reply_markup=InlineKeyboardMarkup(keyboard))
-    return MEAL
+    times = int(query.data)
+    context.user_data["times"] = times
+    context.user_data["collected_times"] = []
+    await query.edit_message_text(
+        f"⏰ *Время приёма 1 из {times}* (ЧЧ:ММ, например 08:00):",
+        parse_mode="Markdown", reply_markup=_CANCEL_BTN
+    )
+    return SCHEDULE
 
 
 async def add_times_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -288,16 +289,14 @@ async def add_times_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Введи число от 1 до 10:", reply_markup=_CANCEL_BTN)
         return TIMES
     context.user_data["times"] = times
-    keyboard = [
-        [InlineKeyboardButton(label, callback_data=key)]
-        for key, label in MEAL_LABELS.items()
-    ]
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")])
-    await update.message.reply_text("Как принимать с пищей?", reply_markup=InlineKeyboardMarkup(keyboard))
-    return MEAL
+    context.user_data["collected_times"] = []
+    await update.message.reply_text(
+        f"⏰ *Время приёма 1 из {times}* (ЧЧ:ММ, например 08:00):",
+        parse_mode="Markdown", reply_markup=_CANCEL_BTN
+    )
+    return SCHEDULE
 
 
-@handle_db_errors
 async def add_schedule_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         time_str = _parse_time(update.message.text.strip())
@@ -311,73 +310,77 @@ async def add_schedule_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(collected) < total:
         await update.message.reply_text(
-            f"Время {len(collected)} из {total} принято. "
-            f"Введи время {len(collected) + 1} из {total}:",
-            reply_markup=_CANCEL_BTN
+            f"✅ Принято. ⏰ *Время приёма {len(collected) + 1} из {total}* (ЧЧ:ММ):",
+            parse_mode="Markdown", reply_markup=_CANCEL_BTN
         )
         return SCHEDULE
 
-    user = update.effective_user
-    user_id = get_or_create_user(user.id, user.username)
-    if count_active_medications(user_id) >= MAX_MEDICATIONS_PER_USER:
-        await update.message.reply_text(
-            f"⚠️ Достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств."
-        )
-        context.user_data.clear()
-        return ConversationHandler.END
-
-    med_id = add_medication(user_id, context.user_data["name"],
-                            context.user_data["dosage"], context.user_data["meal"], total)
-    for t in collected:
-        add_schedule_rule(med_id, t, "daily")
-
+    keyboard = [
+        [InlineKeyboardButton(label, callback_data=key)]
+        for key, label in MEAL_LABELS.items()
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")])
     await update.message.reply_text(
-        f"✅ Лекарство добавлено!\n\n"
-        f"💊 {context.user_data['name']} — {context.user_data['dosage']}\n"
-        f"🍽 {MEAL_LABELS[context.user_data['meal']]}\n"
-        f"🔢 {total} раз в день\n"
-        f"⏰ Напоминания: {', '.join(collected)}"
+        "🍽 *Как принимать с пищей?*",
+        parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    context.user_data.clear()
-    return ConversationHandler.END
+    return MEAL
 
 
-# ── Add flow: advanced scheduling ──────────────────────────────────────────
+# ── Add flow: freq type → save ─────────────────────────────────────────────
 
+@handle_db_errors
 async def choose_freq_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     freq = query.data.split(":")[1]
-    context.user_data["freq_type"] = freq
 
     if freq == "daily":
-        total = context.user_data.get("times", 1)
-        context.user_data["collected_times"] = []
+        user = update.effective_user
+        user_id = get_or_create_user(user.id, user.username)
+        if count_active_medications(user_id) >= MAX_MEDICATIONS_PER_USER:
+            await query.message.reply_text(
+                f"⚠️ Достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств.")
+            context.user_data.clear()
+            return ConversationHandler.END
+        collected = context.user_data["collected_times"]
+        total = len(collected)
+        med_id = add_medication(user_id, context.user_data["name"],
+                                context.user_data["dosage"], context.user_data["meal"], total)
+        for t in collected:
+            add_schedule_rule(med_id, t, "daily")
         await query.edit_message_text(
-            f"Укажи время 1 из {total} приёмов (формат ЧЧ:ММ, например 08:00):",
-            reply_markup=_CANCEL_BTN
+            f"✅ Лекарство добавлено!\n\n"
+            f"💊 {context.user_data['name']} — {context.user_data['dosage']}\n"
+            f"🍽 {MEAL_LABELS[context.user_data['meal']]}\n"
+            f"🔢 {total} раз в день\n"
+            f"⏰ {', '.join(collected)}"
         )
-        return SCHEDULE
+        context.user_data.clear()
+        return ConversationHandler.END
 
     if freq == "interval":
-        await query.edit_message_text("Каждые сколько дней? (например: 2):", reply_markup=_CANCEL_BTN)
+        await query.edit_message_text("🔄 *Через сколько дней?* (например: 2):",
+                                      parse_mode="Markdown", reply_markup=_CANCEL_BTN)
         return FREQ_INTERVAL
 
     if freq == "weekdays":
         context.user_data["freq_weekdays"] = set()
         await query.edit_message_text(
-            "Выбери дни недели, затем нажми Готово:",
-            reply_markup=_weekdays_keyboard(set())
+            "📆 *По дням недели* — выбери и нажми Готово:",
+            parse_mode="Markdown", reply_markup=_weekdays_keyboard(set())
         )
         return FREQ_WEEKDAYS
 
     if freq == "monthly":
-        await query.edit_message_text("Какого числа каждого месяца? (1–31):", reply_markup=_CANCEL_BTN)
+        await query.edit_message_text("🗓 *Какого числа каждого месяца?* (1–31):",
+                                      parse_mode="Markdown", reply_markup=_CANCEL_BTN)
         return FREQ_MONTHDAY
 
     return FREQ_TYPE
 
 
+@handle_db_errors
 async def add_freq_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         n = int(update.message.text.strip())
@@ -385,12 +388,29 @@ async def add_freq_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (ValueError, AssertionError):
         await update.message.reply_text("Введи число от 2 до 90:", reply_markup=_CANCEL_BTN)
         return FREQ_INTERVAL
-    context.user_data["freq_interval_days"] = n
-    total = context.user_data.get("times", 1)
+    user = update.effective_user
+    user_id = get_or_create_user(user.id, user.username)
+    if count_active_medications(user_id) >= MAX_MEDICATIONS_PER_USER:
+        await update.message.reply_text(
+            f"⚠️ Достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств.")
+        context.user_data.clear()
+        return ConversationHandler.END
+    collected = context.user_data["collected_times"]
+    total = len(collected)
+    anchor_date = date.today().isoformat()
+    med_id = add_medication(user_id, context.user_data["name"],
+                            context.user_data["dosage"], context.user_data["meal"], total)
+    for t in collected:
+        add_schedule_rule(med_id, t, "interval", interval_days=n, anchor_date=anchor_date)
     await update.message.reply_text(
-        f"Укажи время 1 из {total} приёмов (формат ЧЧ:ММ, например 08:00):", reply_markup=_CANCEL_BTN
+        f"✅ Лекарство добавлено!\n\n"
+        f"💊 {context.user_data['name']} — {context.user_data['dosage']}\n"
+        f"🍽 {MEAL_LABELS[context.user_data['meal']]}\n"
+        f"🔢 {total} раз в день\n"
+        f"⏰ {', '.join(collected)} — {_freq_label('interval', n, None, None)}"
     )
-    return FREQ_TIME
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 async def toggle_weekday(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -403,6 +423,7 @@ async def toggle_weekday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return FREQ_WEEKDAYS
 
 
+@handle_db_errors
 async def confirm_weekdays(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     selected = context.user_data.get("freq_weekdays", set())
@@ -410,13 +431,32 @@ async def confirm_weekdays(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Выбери хотя бы один день", show_alert=True)
         return FREQ_WEEKDAYS
     await query.answer()
-    total = context.user_data.get("times", 1)
+    user = update.effective_user
+    user_id = get_or_create_user(user.id, user.username)
+    if count_active_medications(user_id) >= MAX_MEDICATIONS_PER_USER:
+        await query.message.reply_text(
+            f"⚠️ Достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств.")
+        context.user_data.clear()
+        return ConversationHandler.END
+    collected = context.user_data["collected_times"]
+    total = len(collected)
+    weekdays = ",".join(str(d) for d in sorted(selected))
+    med_id = add_medication(user_id, context.user_data["name"],
+                            context.user_data["dosage"], context.user_data["meal"], total)
+    for t in collected:
+        add_schedule_rule(med_id, t, "weekdays", weekdays=weekdays)
     await query.edit_message_text(
-        f"Укажи время 1 из {total} приёмов (формат ЧЧ:ММ, например 08:00):", reply_markup=_CANCEL_BTN
+        f"✅ Лекарство добавлено!\n\n"
+        f"💊 {context.user_data['name']} — {context.user_data['dosage']}\n"
+        f"🍽 {MEAL_LABELS[context.user_data['meal']]}\n"
+        f"🔢 {total} раз в день\n"
+        f"⏰ {', '.join(collected)} — {_freq_label('weekdays', None, weekdays, None)}"
     )
-    return FREQ_TIME
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
+@handle_db_errors
 async def add_freq_monthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         day = int(update.message.text.strip())
@@ -424,12 +464,28 @@ async def add_freq_monthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (ValueError, AssertionError):
         await update.message.reply_text("Введи число от 1 до 31:", reply_markup=_CANCEL_BTN)
         return FREQ_MONTHDAY
-    context.user_data["freq_month_day"] = day
-    total = context.user_data.get("times", 1)
+    user = update.effective_user
+    user_id = get_or_create_user(user.id, user.username)
+    if count_active_medications(user_id) >= MAX_MEDICATIONS_PER_USER:
+        await update.message.reply_text(
+            f"⚠️ Достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств.")
+        context.user_data.clear()
+        return ConversationHandler.END
+    collected = context.user_data["collected_times"]
+    total = len(collected)
+    med_id = add_medication(user_id, context.user_data["name"],
+                            context.user_data["dosage"], context.user_data["meal"], total)
+    for t in collected:
+        add_schedule_rule(med_id, t, "monthly", month_day=day)
     await update.message.reply_text(
-        f"Укажи время 1 из {total} приёмов (формат ЧЧ:ММ, например 08:00):", reply_markup=_CANCEL_BTN
+        f"✅ Лекарство добавлено!\n\n"
+        f"💊 {context.user_data['name']} — {context.user_data['dosage']}\n"
+        f"🍽 {MEAL_LABELS[context.user_data['meal']]}\n"
+        f"🔢 {total} раз в день\n"
+        f"⏰ {', '.join(collected)} — {_freq_label('monthly', None, None, day)}"
     )
-    return FREQ_TIME
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 @handle_db_errors
@@ -618,17 +674,17 @@ async def choose_edit_freq_type(update: Update, context: ContextTypes.DEFAULT_TY
     freq = query.data.split(":")[1]
     context.user_data["edit_freq_type"] = freq
     edit_med = context.user_data["edit_med"]
-    current_label = MEAL_LABELS.get(edit_med["meal_relation"], edit_med["meal_relation"])
     await query.edit_message_text(
-        "🍽 *Приём с пищей* — выбери:",
+        "🔢 *Количество приёмов в день* — выбери или введи:",
         parse_mode="Markdown",
-        reply_markup=_edit_meal_keyboard(current_label)
+        reply_markup=_edit_times_keyboard(edit_med["times_per_day"])
     )
-    return EDIT_MEAL
+    return EDIT_TIMES
 
 
 # ── Edit flow: meal → route by freq type ──────────────────────────────────
 
+@handle_db_errors
 async def keep_edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -636,6 +692,7 @@ async def keep_edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await _route_after_edit_meal(query, context)
 
 
+@handle_db_errors
 async def edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -645,22 +702,27 @@ async def edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _route_after_edit_meal(query, context):
     freq = context.user_data.get("edit_freq_type", "daily")
-    edit_med = context.user_data["edit_med"]
 
     if freq == "daily":
+        collected = context.user_data["edit_collected"]
+        total = len(collected)
+        user_id = context.user_data["edit_user_id"]
+        rules = [{"reminder_time": t, "frequency": "daily"} for t in collected]
+        update_medication(context.user_data["edit_id"], user_id,
+                          context.user_data["edit_name"], context.user_data["edit_dosage"],
+                          context.user_data["edit_meal"], total, rules)
         await query.edit_message_text(
-            "🔢 *Количество приёмов в день* — выбери или введи:",
-            reply_markup=_edit_times_keyboard(edit_med["times_per_day"]),
-            parse_mode="Markdown"
+            f"✅ Лекарство обновлено!\n\n"
+            f"💊 {context.user_data['edit_name']} — {context.user_data['edit_dosage']}\n"
+            f"🍽 {MEAL_LABELS[context.user_data['edit_meal']]}\n"
+            f"🔢 {total} раз в день\n"
+            f"⏰ {', '.join(collected)}"
         )
-        return EDIT_TIMES
-
-    edit_med = context.user_data["edit_med"]
-    if "edit_times" not in context.user_data:
-        context.user_data["edit_times"] = edit_med["times_per_day"]
+        context.user_data.clear()
+        return ConversationHandler.END
 
     if freq == "interval":
-        await query.edit_message_text("🔄 *Интервал* — каждые сколько дней? (например: 2):",
+        await query.edit_message_text("🔄 *Через сколько дней?* (например: 2):",
                                       parse_mode="Markdown", reply_markup=_CANCEL_BTN)
         return EDIT_FREQ_INTERVAL
 
@@ -674,11 +736,11 @@ async def _route_after_edit_meal(query, context):
         return EDIT_FREQ_WEEKDAYS
 
     if freq == "monthly":
-        await query.edit_message_text("🗓 *Дата* — какого числа каждого месяца? (1–31):",
+        await query.edit_message_text("🗓 *Какого числа каждого месяца?* (1–31):",
                                       parse_mode="Markdown", reply_markup=_CANCEL_BTN)
         return EDIT_FREQ_MONTHDAY
 
-    return EDIT_TIMES
+    return ConversationHandler.END
 
 
 # ── Edit flow: standard daily ──────────────────────────────────────────────
@@ -729,7 +791,6 @@ async def keep_edit_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return EDIT_SCHEDULE
 
 
-@handle_db_errors
 async def edit_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         time_str = _parse_time(update.message.text.strip())
@@ -749,8 +810,32 @@ async def edit_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return EDIT_SCHEDULE
 
+    edit_med = context.user_data["edit_med"]
+    current_label = MEAL_LABELS.get(edit_med["meal_relation"], edit_med["meal_relation"])
+    await update.message.reply_text(
+        "🍽 *Приём с пищей* — выбери:",
+        parse_mode="Markdown",
+        reply_markup=_edit_meal_keyboard(current_label)
+    )
+    return EDIT_MEAL
+
+
+# ── Edit flow: advanced paths ──────────────────────────────────────────────
+
+@handle_db_errors
+async def edit_freq_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        n = int(update.message.text.strip())
+        assert 2 <= n <= 90
+    except (ValueError, AssertionError):
+        await update.message.reply_text("Введи число от 2 до 90:", reply_markup=_CANCEL_BTN)
+        return EDIT_FREQ_INTERVAL
     user_id = context.user_data["edit_user_id"]
-    rules = [{"reminder_time": t, "frequency": "daily"} for t in collected]
+    collected = context.user_data["edit_collected"]
+    total = len(collected)
+    anchor_date = date.today().isoformat()
+    rules = [{"reminder_time": t, "frequency": "interval", "interval_days": n, "anchor_date": anchor_date}
+             for t in collected]
     update_medication(context.user_data["edit_id"], user_id,
                       context.user_data["edit_name"], context.user_data["edit_dosage"],
                       context.user_data["edit_meal"], total, rules)
@@ -759,28 +844,10 @@ async def edit_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💊 {context.user_data['edit_name']} — {context.user_data['edit_dosage']}\n"
         f"🍽 {MEAL_LABELS[context.user_data['edit_meal']]}\n"
         f"🔢 {total} раз в день\n"
-        f"⏰ {', '.join(collected)}"
+        f"⏰ {', '.join(collected)} — {_freq_label('interval', n, None, None)}"
     )
     context.user_data.clear()
     return ConversationHandler.END
-
-
-# ── Edit flow: advanced paths ──────────────────────────────────────────────
-
-async def edit_freq_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        n = int(update.message.text.strip())
-        assert 2 <= n <= 90
-    except (ValueError, AssertionError):
-        await update.message.reply_text("Введи число от 2 до 90:", reply_markup=_CANCEL_BTN)
-        return EDIT_FREQ_INTERVAL
-    context.user_data["edit_freq_interval_days"] = n
-    total = context.user_data.get("edit_times", 1)
-    await update.message.reply_text(
-        f"⏰ *Время приёма 1 из {total}* (ЧЧ:ММ, например 08:00):",
-        parse_mode="Markdown", reply_markup=_CANCEL_BTN
-    )
-    return EDIT_FREQ_TIME
 
 
 async def toggle_edit_weekday(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -793,6 +860,7 @@ async def toggle_edit_weekday(update: Update, context: ContextTypes.DEFAULT_TYPE
     return EDIT_FREQ_WEEKDAYS
 
 
+@handle_db_errors
 async def confirm_edit_weekdays(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     selected = context.user_data.get("edit_freq_weekdays", set())
@@ -800,14 +868,27 @@ async def confirm_edit_weekdays(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("Выбери хотя бы один день", show_alert=True)
         return EDIT_FREQ_WEEKDAYS
     await query.answer()
-    total = context.user_data.get("edit_times", 1)
+    user_id = context.user_data["edit_user_id"]
+    collected = context.user_data["edit_collected"]
+    total = len(collected)
+    weekdays = ",".join(str(d) for d in sorted(selected))
+    rules = [{"reminder_time": t, "frequency": "weekdays", "weekdays": weekdays}
+             for t in collected]
+    update_medication(context.user_data["edit_id"], user_id,
+                      context.user_data["edit_name"], context.user_data["edit_dosage"],
+                      context.user_data["edit_meal"], total, rules)
     await query.edit_message_text(
-        f"⏰ *Время приёма 1 из {total}* (ЧЧ:ММ, например 08:00):",
-        parse_mode="Markdown", reply_markup=_CANCEL_BTN
+        f"✅ Лекарство обновлено!\n\n"
+        f"💊 {context.user_data['edit_name']} — {context.user_data['edit_dosage']}\n"
+        f"🍽 {MEAL_LABELS[context.user_data['edit_meal']]}\n"
+        f"🔢 {total} раз в день\n"
+        f"⏰ {', '.join(collected)} — {_freq_label('weekdays', None, weekdays, None)}"
     )
-    return EDIT_FREQ_TIME
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
+@handle_db_errors
 async def edit_freq_monthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         day = int(update.message.text.strip())
@@ -815,13 +896,23 @@ async def edit_freq_monthday(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except (ValueError, AssertionError):
         await update.message.reply_text("Введи число от 1 до 31:", reply_markup=_CANCEL_BTN)
         return EDIT_FREQ_MONTHDAY
-    context.user_data["edit_freq_month_day"] = day
-    total = context.user_data.get("edit_times", 1)
+    user_id = context.user_data["edit_user_id"]
+    collected = context.user_data["edit_collected"]
+    total = len(collected)
+    rules = [{"reminder_time": t, "frequency": "monthly", "month_day": day}
+             for t in collected]
+    update_medication(context.user_data["edit_id"], user_id,
+                      context.user_data["edit_name"], context.user_data["edit_dosage"],
+                      context.user_data["edit_meal"], total, rules)
     await update.message.reply_text(
-        f"⏰ *Время приёма 1 из {total}* (ЧЧ:ММ, например 08:00):",
-        parse_mode="Markdown", reply_markup=_CANCEL_BTN
+        f"✅ Лекарство обновлено!\n\n"
+        f"💊 {context.user_data['edit_name']} — {context.user_data['edit_dosage']}\n"
+        f"🍽 {MEAL_LABELS[context.user_data['edit_meal']]}\n"
+        f"🔢 {total} раз в день\n"
+        f"⏰ {', '.join(collected)} — {_freq_label('monthly', None, None, day)}"
     )
-    return EDIT_FREQ_TIME
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 @handle_db_errors
@@ -897,7 +988,6 @@ def get_add_handler(cancel_handler):
                 CallbackQueryHandler(confirm_weekdays, pattern="^weekdays_confirm$"),
             ],
             FREQ_MONTHDAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_freq_monthday)],
-            FREQ_TIME:     [MessageHandler(filters.TEXT & ~filters.COMMAND, add_freq_time)],
         },
         fallbacks=[
             cancel_handler,
@@ -938,7 +1028,6 @@ def get_edit_handler(cancel_handler):
                 CallbackQueryHandler(confirm_edit_weekdays, pattern="^edit_weekdays_confirm$"),
             ],
             EDIT_FREQ_MONTHDAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_freq_monthday)],
-            EDIT_FREQ_TIME:     [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_freq_time)],
         },
         fallbacks=[
             cancel_handler,
