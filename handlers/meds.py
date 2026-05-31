@@ -143,7 +143,10 @@ async def show_meds_list(message, user):
     for med in meds:
         rules = get_schedules_by_medication(med["id"])
         has_advanced = any(r["frequency"] != "daily" for r in rules)
-        schedule_str = "\n".join(_format_schedule_rule(r) for r in rules) or "не указано"
+        if not has_advanced:
+            schedule_str = ", ".join(r["reminder_time"] for r in rules) or "не указано"
+        else:
+            schedule_str = "\n".join(_format_schedule_rule(r) for r in rules) or "не указано"
         meal = MEAL_LABELS.get(med["meal_relation"], med["meal_relation"])
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("✏️ Изменить", callback_data=f"edit:{med['id']}"),
