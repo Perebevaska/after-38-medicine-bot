@@ -7,7 +7,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Claude Code / Cloud
+# Claude Code
 .claude/
+CLAUDE.md
 *.log
 db_errors.log
