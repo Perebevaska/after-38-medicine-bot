@@ -11,7 +11,7 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     ConversationHandler, MessageHandler, filters
 )
-from database import init_db, migrate
+from database import init_pool, init_db, migrate, close_pool
 from scheduler import send_reminders, handle_intake_callback
 from handlers import meds
 from handlers import timezone as tz_handler
@@ -57,6 +57,7 @@ async def error_handler(update, context):
 
 def main():
     """Точка входа: инициализирует БД, регистрирует все handlers, запускает бота."""
+    init_pool()
     init_db()
     migrate()
     # Увеличенные таймауты: дефолтные 5с часто срабатывают на нестабильной
