@@ -1,9 +1,13 @@
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from database import get_active_schedule_rows, log_intake
+from database import (get_active_schedule_rows, log_intake, apply_intake_stock,
+                      get_schedules_by_medication, get_or_create_user, get_medication_by_id)
 from utils import escape_md, get_tz_for_user, local_day_bounds_utc
+# _rule_fires_today живёт в schedule_utils (чистая логика, без telegram/db);
+# реэкспорт для обратной совместимости: stats/export/timezone импортируют его отсюда.
+from schedule_utils import _rule_fires_today, days_of_stock_left
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +28,6 @@ def clear_pending_for_medication(medication_id: int):
     """Удаляет все pending-записи для указанного лекарства (вызывается при деактивации)."""
     for key in [k for k in _pending if k[1] == medication_id]:
         del _pending[key]
-
-
-def _rule_fires_today(row, today_local: date) -> bool:
-    """Проверяет, должно ли правило сработать сегодня."""
-    freq = row["frequency"]
-    if freq == "daily":
-        return True
-    if freq == "weekdays":
-        days = [int(d) for d in (row["weekdays"] or "").split(",") if d]
-        return today_local.isoweekday() in days
-    if freq == "monthly":
-        return today_local.day == row["month_day"]
-    if freq == "interval":
-        anchor_str = row["anchor_date"]
-        if not anchor_str:
-            return False
-        anchor = date.fromisoformat(anchor_str)
-        return (today_local - anchor).days % row["interval_days"] == 0
-    return False
 
 
 def _prune_pending(now_utc: datetime):
@@ -213,7 +198,7 @@ async def handle_intake_callback(update, context):
     try:
         user_tz = get_tz_for_user(update.effective_user.id)
         start_utc, end_utc = local_day_bounds_utc(user_tz)
-        log_intake(medication_id, scheduled_time, status, start_utc, end_utc)
+        old_status = log_intake(medication_id, scheduled_time, status, start_utc, end_utc)
     except Exception as e:
         logger.error("Ошибка записи приёма: %s", e)
         await query.edit_message_text("⚠️ Не удалось записать приём. Попробуй ещё раз.")
@@ -226,3 +211,33 @@ async def handle_intake_callback(update, context):
         await query.edit_message_text("✅ Отлично! Приём записан.")
     else:
         await query.edit_message_text("❌ Пропуск записан.")
+
+    # F5: автосписание запаса + предупреждение при пересечении порога
+    try:
+        await _update_stock_on_intake(
+            query, medication_id, status, old_status, update.effective_user.id, user_tz
+        )
+    except Exception as e:
+        logger.error("Ошибка обновления запаса: %s", e)
+
+
+async def _update_stock_on_intake(query, medication_id, new_status, old_status, telegram_id, user_tz):
+    """Списывает/возвращает запас при отметке приёма; предупреждает при переходе ниже порога."""
+    info = apply_intake_stock(medication_id, new_status, old_status)
+    if not info or not info["changed"] or new_status != "taken":
+        return
+    rules = get_schedules_by_medication(medication_id)
+    today = datetime.now(user_tz).date()
+    qty, units, thr = info["stock_qty"], info["units_per_dose"], info["low_stock_days"]
+    after = days_of_stock_left(rules, qty, units, today)
+    before = days_of_stock_left(rules, qty + units, units, today)
+    # Предупреждаем один раз — на самом пересечении порога (before выше, after на/ниже).
+    if after is not None and after <= thr and (before is None or before > thr):
+        user_id = get_or_create_user(telegram_id)
+        med = get_medication_by_id(medication_id, user_id)
+        name = escape_md(med["name"]) if med else "Лекарство"
+        await query.message.reply_text(
+            f"⚠️ *{name}* скоро закончится: осталось примерно на {after} дн. ({qty:g} шт.).\n"
+            f"Не забудь пополнить запас 📦",
+            parse_mode="Markdown"
+        )

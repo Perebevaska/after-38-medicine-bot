@@ -84,6 +84,9 @@ def init_db():
                 times_per_day INTEGER NOT NULL,
                 active INTEGER DEFAULT 1,
                 dependent_id INTEGER DEFAULT NULL,
+                stock_qty REAL DEFAULT NULL,
+                units_per_dose REAL DEFAULT 1,
+                low_stock_days INTEGER DEFAULT 5,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (dependent_id) REFERENCES dependents(id)
@@ -155,6 +158,13 @@ def migrate():
         med_cols = [r[1] for r in conn.execute("PRAGMA table_info(medications)")]
         if "dependent_id" not in med_cols:
             conn.execute("ALTER TABLE medications ADD COLUMN dependent_id INTEGER DEFAULT NULL REFERENCES dependents(id)")
+        # F5 — учёт запаса таблеток
+        if "stock_qty" not in med_cols:
+            conn.execute("ALTER TABLE medications ADD COLUMN stock_qty REAL DEFAULT NULL")
+        if "units_per_dose" not in med_cols:
+            conn.execute("ALTER TABLE medications ADD COLUMN units_per_dose REAL DEFAULT 1")
+        if "low_stock_days" not in med_cols:
+            conn.execute("ALTER TABLE medications ADD COLUMN low_stock_days INTEGER DEFAULT 5")
 
         # Дропаем устаревшую таблицу schedules (данные давно в schedule_rules)
         conn.execute("DROP TABLE IF EXISTS schedules")
@@ -230,15 +240,38 @@ def get_user_time_presets(telegram_id: int) -> dict:
         return {"morning": "09:00", "lunch": "12:00", "evening": "18:00", "night": "22:00"}
 
 
-def set_user_time_preset(telegram_id: int, slot: str, time: str):
-    """Обновляет один пресет времени пользователя."""
+def set_user_time_preset(telegram_id: int, slot: str, time: str) -> int:
+    """Обновляет пресет времени и переносит существующие правила с прежнего времени на новое.
+
+    Слоты хранятся в schedule_rules как конкретное время (снимок пресета на момент
+    создания). Чтобы смена пресета «прокидывалась» в напоминания/список/план, все
+    активные правила пользователя с reminder_time == старое значение пресета
+    обновляются на новое. Возвращает число обновлённых правил.
+    """
     col_map = {"morning": "time_morning", "lunch": "time_lunch",
                "evening": "time_evening", "night": "time_night"}
     col = col_map.get(slot)
     if not col:
         raise ValueError(f"Unknown slot: {slot}")
     with get_connection() as conn:
+        row = conn.execute(
+            f"SELECT id, {col} AS old FROM users WHERE telegram_id = ?", (telegram_id,)
+        ).fetchone()
+        if row is None:
+            return 0
+        old_time, user_id = row["old"], row["id"]
         conn.execute(f"UPDATE users SET {col} = ? WHERE telegram_id = ?", (time, telegram_id))
+        if not old_time or old_time == time:
+            return 0
+        cur = conn.execute(
+            """UPDATE schedule_rules SET reminder_time = ?
+               WHERE reminder_time = ?
+                 AND medication_id IN (
+                     SELECT id FROM medications WHERE user_id = ? AND active = 1
+                 )""",
+            (time, old_time, user_id)
+        )
+        return cur.rowcount
 
 
 def count_active_medications(user_id: int, dependent_id: int = None) -> int:
@@ -676,10 +709,12 @@ def log_intake(medication_id: int, scheduled_time: str, status: str,
     """Записывает факт приёма или пропуска лекарства. Обновляет запись если уже есть за сегодня.
 
     «Сегодня» определяется диапазоном [start_utc, end_utc) в TZ пользователя.
+    Возвращает прежний статус записи за сегодня (или None, если записи не было) —
+    нужно для идемпотентного списания запаса (F5).
     """
     with get_connection() as conn:
         existing = conn.execute(
-            """SELECT id FROM intake_log
+            """SELECT id, status FROM intake_log
                WHERE medication_id = ? AND scheduled_time = ?
                AND taken_at >= ? AND taken_at < ?""",
             (medication_id, scheduled_time, start_utc, end_utc)
@@ -689,9 +724,91 @@ def log_intake(medication_id: int, scheduled_time: str, status: str,
                 "UPDATE intake_log SET status = ?, taken_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (status, existing["id"])
             )
-        else:
-            conn.execute(
-                """INSERT INTO intake_log (medication_id, scheduled_time, status, taken_at)
-                   VALUES (?, ?, ?, CURRENT_TIMESTAMP)""",
-                (medication_id, scheduled_time, status)
-            )
+            return existing["status"]
+        conn.execute(
+            """INSERT INTO intake_log (medication_id, scheduled_time, status, taken_at)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)""",
+            (medication_id, scheduled_time, status)
+        )
+        return None
+
+
+# ── Учёт запаса таблеток (F5) ───────────────────────────────────────────────
+
+def set_medication_stock(medication_id: int, user_id: int, stock_qty: float):
+    """Устанавливает остаток (включает трекинг). Для начального ввода и пополнения (absolute)."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE medications SET stock_qty = ? WHERE id = ? AND user_id = ?",
+            (stock_qty, medication_id, user_id)
+        )
+
+
+def add_medication_stock(medication_id: int, user_id: int, amount: float):
+    """Прибавляет amount к остатку (пополнение упаковкой). Если трекинг был выключен — включает."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT stock_qty FROM medications WHERE id = ? AND user_id = ?",
+            (medication_id, user_id)
+        ).fetchone()
+        base = (row["stock_qty"] if row and row["stock_qty"] is not None else 0)
+        conn.execute(
+            "UPDATE medications SET stock_qty = ? WHERE id = ? AND user_id = ?",
+            (base + amount, medication_id, user_id)
+        )
+
+
+def set_units_per_dose(medication_id: int, user_id: int, units: float):
+    """Устанавливает расход единиц за один приём."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE medications SET units_per_dose = ? WHERE id = ? AND user_id = ?",
+            (units, medication_id, user_id)
+        )
+
+
+def set_low_stock_days(medication_id: int, user_id: int, days: int):
+    """Устанавливает порог предупреждения (в днях)."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE medications SET low_stock_days = ? WHERE id = ? AND user_id = ?",
+            (days, medication_id, user_id)
+        )
+
+
+def disable_stock_tracking(medication_id: int, user_id: int):
+    """Выключает учёт запаса (stock_qty = NULL)."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE medications SET stock_qty = NULL WHERE id = ? AND user_id = ?",
+            (medication_id, user_id)
+        )
+
+
+def apply_intake_stock(medication_id: int, new_status: str, old_status):
+    """Корректирует остаток при отметке приёма. Возвращает dict состояния после или None.
+
+    Идемпотентно: списывает units_per_dose только при переходе в `taken`,
+    возвращает при уходе из `taken`. `changed=True` — если остаток изменился.
+    None — если трекинг выключен (stock_qty IS NULL) или лекарство не найдено.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT stock_qty, units_per_dose, low_stock_days FROM medications WHERE id = ?",
+            (medication_id,)
+        ).fetchone()
+        if row is None or row["stock_qty"] is None:
+            return None
+        units = row["units_per_dose"] or 1
+        qty = row["stock_qty"]
+        changed = False
+        if new_status == "taken" and old_status != "taken":
+            qty = max(0, qty - units)
+            changed = True
+        elif old_status == "taken" and new_status != "taken":
+            qty = qty + units
+            changed = True
+        if changed:
+            conn.execute("UPDATE medications SET stock_qty = ? WHERE id = ?", (qty, medication_id))
+        return {"stock_qty": qty, "units_per_dose": units,
+                "low_stock_days": row["low_stock_days"], "changed": changed}

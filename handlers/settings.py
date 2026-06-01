@@ -26,7 +26,7 @@ def _settings_text(tz: str, mode_label: str, presets: dict, daily_plan: dict,
     return (
         f"⚙️ *Настройки*\n\n"
         f"🌍 Часовой пояс: `{tz}`\n"
-        f"🔔 Напоминания о приёме лекарств: {mode_label}\n"
+        f"🔔 Напоминания: {mode_label}\n"
         f"⏰ Время приёмов: {presets_line}\n"
         f"📋 План на день: {dp_line}\n"
         f"👨‍👩‍👧 Caregiver-режим: {cg_line}\n\n"
@@ -52,7 +52,7 @@ def _settings_keyboard(mode_label: str, daily_plan: dict,
     cg_label = "👨‍👩‍👧 Caregiver-режим: ✅ Вкл" if caregiver_enabled else "👨‍👩‍👧 Caregiver-режим: ❌ Выкл"
     rows = [
         [InlineKeyboardButton("🌍 Изменить часовой пояс", callback_data="settings:timezone")],
-        [InlineKeyboardButton(f"Напоминания о приёме лекарств: {mode_label}", callback_data="settings:reminder")],
+        [InlineKeyboardButton(f"🔔 Напоминания: {mode_label}", callback_data="settings:reminder")],
         [InlineKeyboardButton("⏰ Настроить время приёмов", callback_data="settings:presets")],
         [InlineKeyboardButton(dp_label, callback_data="settings:daily_plan")],
         [InlineKeyboardButton(cg_label, callback_data="settings:caregiver")],
@@ -180,11 +180,12 @@ async def handle_preset_time_input(update: Update, context: ContextTypes.DEFAULT
         return PRESET_TIME
     slot = context.user_data.get("preset_slot")
     user = update.effective_user
-    set_user_time_preset(user.id, slot, time_str)
+    updated = set_user_time_preset(user.id, slot, time_str)
     presets = get_user_time_presets(user.id)
     label = SLOT_LABELS[slot]
+    note = f"\n_Перенесено приёмов на новое время: {updated}._" if updated else ""
     await update.message.reply_text(
-        f"✅ *{label}* → {time_str}\n\nНажми чтобы изменить другое:",
+        f"✅ *{label}* → {time_str}{note}\n\nНажми чтобы изменить другое:",
         parse_mode="Markdown",
         reply_markup=_presets_keyboard(presets)
     )

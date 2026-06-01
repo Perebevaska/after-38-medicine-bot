@@ -21,6 +21,7 @@ med-bot/
 ├── bot.py              # точка входа — только main() + регистрация handlers
 ├── database.py         # SQLite CRUD через get_connection()
 ├── scheduler.py        # send_reminders() каждую минуту
+├── schedule_utils.py   # чистая логика «положенных приёмов» (_rule_fires_today + due/count хелперы)
 ├── constants.py        # States, MEAL_LABELS, MONTHS_GEN, MAX_MEDICATIONS_PER_USER
 ├── utils.py            # handle_db_errors, get_tz_for_user, cancel, escape_md, parse_time
 ├── broadcast.py        # standalone скрипт рассылки (python3 broadcast.py)
@@ -31,6 +32,7 @@ med-bot/
     ├── settings.py     # settings, about, reminder_mode toggle, daily plan
     ├── admin.py        # админ-панель (только ADMIN_ID)
     ├── caregiver.py    # caregiver-режим: подопечные (dependents), вкл/выкл
+    ├── stock.py        # F5: экран «📦 Запас» — остаток/расход/порог/прогноз
     └── timezone.py     # start, timezone setup, main menu, Лекарства на сегодня
 ```
 
@@ -38,7 +40,7 @@ med-bot/
 5 активных таблиц:
 - `users` (telegram_id, username, timezone, reminder_mode, time_morning, time_lunch, time_evening, time_night, daily_plan_enabled, daily_plan_time, **caregiver_enabled**)
 - `dependents` (user_id FK, name) — подопечные caregiver-режима
-- `medications` (user_id FK, name, dosage, meal_relation, times_per_day, active, **dependent_id** FK NULL)
+- `medications` (user_id FK, name, dosage, meal_relation, times_per_day, active, **dependent_id** FK NULL, **stock_qty** REAL NULL=трекинг выкл, **units_per_dose** REAL, **low_stock_days** INTEGER) — F5: учёт запаса
 - `schedule_rules` (medication_id FK, reminder_time, frequency, interval_days, weekdays, month_day, anchor_date, dosage) — `dosage NULL` = берётся из `medications.dosage`
 - `intake_log` (medication_id FK, scheduled_time, taken_at, status: taken/skipped/pending)
 
@@ -138,6 +140,10 @@ pytest -q
 - `tests/test_handlers.py` — характеризационные тесты save-хендлеров (add/edit × daily/interval/weekdays/monthly): фиксируют текст «✅ Лекарство добавлено/обновлено» и валидацию диапазонов; БД мокается в namespace `handlers.meds`, Telegram заменён фейками
 - `tests/test_menu.py` — навигация меню (`menu:main`/`about`/`stats`) и наличие кнопок «◀️ В меню»
 - `tests/test_conv_structure.py` — снапшот структуры `get_add_handler`/`get_edit_handler` (состояния, callback'и, паттерны); защищает дедуп общих состояний (`_schedule_input_states`)
+- `tests/test_schedule_utils.py` — «положенные приёмы» за день/период (`due_intakes_on`, `iter_due_by_day`, `count_due_*`) + прогноз запаса `days_of_stock_left` (F5) + реэкспорт `_rule_fires_today`
+- `tests/test_stock_db.py` — DB-слой запаса F5 (set/add/units/threshold, `apply_intake_stock` идемпотентно, `log_intake` возвращает старый статус) на временной БД
+- `tests/test_stock_intake.py` — интеграция: списание и предупреждение при пересечении порога через `handle_intake_callback`
+- `tests/test_delete_user_data.py` — полное удаление данных пользователя по всем таблицам + изоляция от других
 - Не трогают реальную БД и сеть — функции/хендлеры вызываются напрямую
 - Конфиг — `pytest.ini` (`testpaths = tests`); dev-зависимости — `requirements-dev.txt`
 - **Перед рефакторингом хендлеров**: запусти `pytest` до и после — `test_handlers.py` ловит изменения текста сообщений
@@ -193,6 +199,7 @@ ADMIN_ID=telegram_id_админа
 - **Перезапуск после рефакторинга обязателен**: ConversationHandler хранит состояния в памяти
 - Пресеты времени (🌅 Утро/☀️ Обед/🌇 Вечер/🌙 Ночь): хранятся в `users.time_morning/lunch/evening/night`, редактируются через `/settings` → "⏰ Настроить время приёмов"
 - `SLOT_ORDER`, `SLOT_LABELS` в `constants.py`; `get_user_time_presets()` / `set_user_time_preset()` в `database.py`
+- **Смена пресета мигрирует правила**: `set_user_time_preset()` обновляет все активные `schedule_rules` пользователя с `reminder_time == старое значение` на новое (слоты хранятся как снимок времени) — иначе старое время «зависает» в напоминаниях/списке/плане. Возвращает число перенесённых правил
 - **Разная дозировка**: одно `medications`-запись, правила А с `dosage=NULL`, правила Б с `dosage=dosage_b`; планировщик использует `rule_dosage or med_dosage`; список лекарств показывает дату следующего срабатывания через `_next_fire_label()` + `_compute_next_fire()`
 - **Один проход планировщика**: `send_reminders()` берёт `get_active_schedule_rows()` (все правила активных лекарств + поля пользователя одним запросом) и передаёт их в `_send_daily_plans(app, schedules)`; план дня фильтруется по `daily_plan_enabled` в Python — без второго запроса к БД
 - **Plan на день**: `_daily_plan_sent: set` в `scheduler.py` предотвращает дубли (TTL-prune старше 2 дней); строки берутся из общего прохода (`daily_plan_enabled=1`)
@@ -262,12 +269,28 @@ ADMIN_ID=telegram_id_админа
 | 53 | `handlers/meds.py`, `tests/test_handlers.py` | Q1 (частично): success-сообщения сведены в `_med_saved_text()`, валидация диапазонов — в `_parse_int_range()` (8 save-хендлеров + 6 валидаций). Под защитой 24 характеризационных тестов |
 | 54 | `handlers/timezone.py`, `stats.py`, `settings.py`, `meds.py`, `bot.py`, `tests/test_menu.py` | Непоследовательные «Назад»: часть экранов меню без возврата. Сделана единая точка входа `/menu` + навигация edit-in-place с «◀️ В меню» (`menu:main`) на всех экранах |
 | 55 | `handlers/timezone.py`, `bot.py` | `telegram.error.TimedOut` ронял старт (незащищённый `set_my_commands`) и часто срабатывал на дефолтных 5с. Таймауты 20с + try/except в `post_init` |
+| 57 | `database.py`, `handlers/settings.py` | **Баг**: смена пресета времени в `/settings` не прокидывалась в существующие напоминания/список/план (оставалось старое время). `set_user_time_preset` теперь мигрирует правила `reminder_time` старое→новое. Тесты `test_preset_migration` |
+| UX | `handlers/meds.py`, `handlers/settings.py` | Пакет UX: подсказка «время слотов меняется в Настройках» на шаге «Когда принимать»; кнопка «Напоминания о приёме лекарств»→«🔔 Напоминания»; кнопка «📦 Указать запас» на сообщении «Лекарство добавлено/обновлено»; список лекарств — кнопки «Добавить»/«В меню» слиты в последнюю карточку (убран отдельный блок «Хочешь добавить ещё?») |
+| 56 | `schedule_utils.py`, `database.py`, `handlers/stock.py`, `scheduler.py`, `handlers/meds.py`, `bot.py`, `constants.py` | **F5 реализована** — учёт запаса таблеток. Колонки `stock_qty/units_per_dose/low_stock_days`; экран «📦 Запас» (указать/пополнить/единицы/порог/выключить); автосписание при `taken` (идемпотентно через старый статус из `log_intake`); прогноз `days_of_stock_left`; событийное предупреждение при пересечении порога; индикатор в списке лекарств. Тесты: 18+9+5 |
 | Q1b | `handlers/meds.py`, `tests/test_conv_structure.py` | Слияние идентичных наборов состояний add/edit (10 общих состояний) в `_schedule_input_states()` через `**`-распаковку. Под защитой снапшот-теста структуры диалогов |
 
 ### 🔲 К исправлению
 
 | # | Файл | Проблема |
 |---|------|----------|
+
+### 💡 В планах (фичи)
+
+> **Фундамент готов**: `schedule_utils.py` — чистая логика «положенных приёмов» (`due_intakes_on`, `iter_due_by_day`, `count_due_by_medication`, `count_due_total`). База для F2/F3/F5. `_rule_fires_today` перенесён туда из `scheduler.py` (реэкспортируется для совместимости). Покрыто `tests/test_schedule_utils.py`. ⚠️ Потребители аналитики должны сами ограничивать период началом действия лекарства (хелпер применяет правило к любой дате).
+
+| # | Файл | Описание |
+|---|------|----------|
+| F1 | `handlers/export.py`, `database.py`, `handlers/stats.py` | **Отчёт для врача** — PDF с историей приёма за месяц для распечатки на приём. Период: последние 30 дней (или выбор месяца). Содержание: шапка (пациент/подопечный, период, дата формирования); по каждому лекарству — название, дозировка, расписание, приверженность % (taken/total); таблица приёмов по дням с отметками ✅/❌; итоговая сводка. Переиспользовать `_build_pdf` (новые `sections`) + `asyncio.to_thread`. Новый коллбэк `export:doctor` + кнопка в `/stats`/меню. Запросы: `get_history_detailed`/`get_history` с `days=30` (диапазон в TZ пользователя через `local_day_bounds_utc`-логику). Учесть caregiver: выбор «для кого» или отдельные секции по подопечным |
+| F2 | `database.py`, `handlers/stats.py`, `scheduler.py` | **Streak / серия** — «принимаешь N дней подряд 🔥», мотивирует не пропускать. «Идеальный день» = все запланированные на день приёмы отмечены `taken` (нет `skipped`/`pending`); серия = число подряд идущих идеальных дней до сегодня (текущий день не рвёт серию, пока приёмы ещё `pending`). Расчёт: для каждого дня определить «положенные» приёмы через `_rule_fires_today` + сверить с `intake_log` (в TZ пользователя). Показ: в `/stats`, «Лекарства на сегодня» и/или главном меню — «🔥 N дней подряд»; миля-стоуны (7/30 дней) — поощрительное сообщение. Хранить можно вычисляемо (без новой колонки) либо кешировать `best_streak` в `users`. Учесть caregiver (серия общая или по подопечному — решить) |
+| F3 | `database.py`, `handlers/stats.py` | **Процент соблюдения за месяц (adherence rate)** — главная метрика медприложений. Формула: `taken / запланировано` за 30 дней (знаменатель — все «положенные» приёмы из расписания через `_rule_fires_today`, а **не** только залогированные строки `intake_log`, иначе пропуски без отметки не учтутся). Показ: в `/stats` отдельной строкой с цветовым индикатором (🟢 ≥80% / 🟡 ≥50% / 🔴) — переиспользовать существующую логику порогов из `stats.py`; разбивка по каждому лекарству + общий итог. Связано с F1 (метрика идёт в отчёт для врача) и F2 (общий расчёт «положенных» приёмов за период — вынести в общий хелпер) |
+| F4 | `database.py`, `handlers/meds.py`, `scheduler.py`, `constants.py` | **Пауза лекарства** — временно отключить напоминания без удаления (например, в отпуске). Новое состояние: колонка `medications.paused` (0/1) ИЛИ `paused_until` (дата автовозобновления). Планировщик `get_active_schedule_rows` фильтрует `paused=0` (и/или `paused_until < today`); `clear_pending_for_medication` при постановке на паузу. UI: кнопка «⏸ Пауза»/«▶️ Возобновить» в списке лекарств рядом с «Изменить/Удалить»; пометка «⏸ на паузе» в списке и «Лекарства на сегодня». Опционально — пауза до даты с автовозобновлением. Не должно ломать adherence (F3): дни на паузе исключать из знаменателя. Связь с F5: на паузе не списывать запас и не слать предупреждения (в `_update_stock_on_intake`/`apply_intake_stock` учесть `paused`) |
+| F6 | `scheduler.py`, `handlers/timezone.py`, `database.py` | **Быстрое подтверждение всех лекарств сразу** — одна кнопка «✅ Принять всё». Где: под «Лекарствами на сегодня» и/или в напоминании. Логика: собрать все сегодняшние «положенные» приёмы со статусом `pending`/нет записи (через `get_schedules_for_user` + `_rule_fires_today` + `get_today_intake_statuses`), для каждого `log_intake(..., 'taken')` в диапазоне локальных суток. Коллбэк `take_all` (опц. `take_all:<dependent_id>` для caregiver). После — обновить экран с иконками ✅. Не перетирать уже отмеченные `skipped` без подтверждения (решить) |
+| F7 | `database.py`, `handlers/caregiver.py`, `scheduler.py` | **Социальное / Caregiver-расширение** (есть задел: таблица `dependents`, `medications.dependent_id`, режим в `/settings`). Идеи: уведомлять опекуна о пропусках подопечного («Маша не приняла лекарство в 09:00»); сводка приверженности подопечного; возможно — связать двух реальных пользователей (опекун ↔ подопечный по telegram_id, а не только локальная запись), приглашение/подтверждение. Требует продумать приватность и согласие. Строить поверх существующего caregiver-флоу |
 
 ### ✅ Исправлено (caregiver)
 
