@@ -635,6 +635,39 @@ def get_taken_counts(user_id: int, start_utc: str, end_utc: str) -> dict:
     return {r["mid"]: r["cnt"] for r in rows}
 
 
+def get_streak_rows(user_id: int) -> list:
+    """Правила активных непаузных лекарств + dependent_id/имя/created_at — для серий (F2).
+
+    Группируются по подопечному (dependent_id) в streak.streaks_by_subject:
+    серия считается отдельно для владельца и каждого подопечного.
+    """
+    with get_connection() as conn:
+        return conn.execute(
+            """SELECT m.id AS medication_id, m.dependent_id, m.created_at,
+                      d.name AS dependent_name,
+                      sr.reminder_time, sr.frequency, sr.interval_days,
+                      sr.weekdays, sr.month_day, sr.anchor_date
+               FROM medications m
+               JOIN schedule_rules sr ON sr.medication_id = m.id
+               LEFT JOIN dependents d ON d.id = m.dependent_id
+               WHERE m.user_id = ? AND m.active = 1 AND m.paused = 0
+               ORDER BY m.id""",
+            (user_id,)
+        ).fetchall()
+
+
+def get_intake_statuses_window(user_id: int, start_utc: str, end_utc: str) -> list:
+    """Записи intake_log (mid, scheduled_time, status, taken_at) пользователя за окно — для серий (F2)."""
+    with get_connection() as conn:
+        return conn.execute(
+            """SELECT i.medication_id, i.scheduled_time, i.status, i.taken_at
+               FROM intake_log i
+               JOIN medications m ON m.id = i.medication_id
+               WHERE m.user_id = ? AND i.taken_at >= ? AND i.taken_at < ?""",
+            (user_id, start_utc, end_utc)
+        ).fetchall()
+
+
 def update_medication(medication_id: int, user_id: int, name: str, dosage: str,
                       meal_relation: str, times_per_day: int, new_rules: list):
     """Обновляет лекарство и его расписание. new_rules — список dict с полями rule."""

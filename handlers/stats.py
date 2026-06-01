@@ -4,11 +4,13 @@ import pytz
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 from database import (get_or_create_user, get_today_stats, get_history_detailed,
-                      get_schedules_for_user, get_adherence_rules, get_taken_counts)
+                      get_schedules_for_user, get_adherence_rules, get_taken_counts,
+                      get_streak_rows, get_intake_statuses_window)
 from constants import MONTHS_GEN, MONTHS_SHORT
 from utils import handle_db_errors, get_tz_for_user, escape_html
 from scheduler import _rule_fires_today
 from schedule_utils import count_due_by_medication
+from streak import streak_window, streaks_by_subject
 
 _WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 _ADHERENCE_DAYS = 30
@@ -24,9 +26,32 @@ def _stats_period_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📈 За 7 дней", callback_data="stats:week")],
         [InlineKeyboardButton("📆 План на 7 дней", callback_data="stats:plan")],
+        [InlineKeyboardButton("🔥 Серия", callback_data="stats:streak")],
         [InlineKeyboardButton("📊 Соблюдение за 30 дней", callback_data="stats:adherence")],
         [InlineKeyboardButton("◀️ В меню", callback_data="menu:main")],
     ])
+
+
+def _plural_days(n: int) -> str:
+    """Русское склонение слова «день» для числа n."""
+    n10, n100 = n % 10, n % 100
+    if n10 == 1 and n100 != 11:
+        return "день"
+    if 2 <= n10 <= 4 and not 12 <= n100 <= 14:
+        return "дня"
+    return "дней"
+
+
+def _streak_phrase(n: int) -> str:
+    """Мотивирующая фраза о серии: 🔥 N дней подряд + майлстоун-значок (7→⭐, 30→🏆)."""
+    if n <= 0:
+        return "пока нет серии — начни сегодня!"
+    phrase = f"🔥 {n} {_plural_days(n)} подряд"
+    if n >= 30:
+        phrase += " 🏆"
+    elif n >= 7:
+        phrase += " ⭐"
+    return phrase
 
 
 def _report_keyboard(export_cb: str) -> InlineKeyboardMarkup:
@@ -275,6 +300,37 @@ async def show_adherence(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @handle_db_errors
+async def show_streak(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает серию идеальных дней (F2) — отдельно для владельца и каждого подопечного."""
+    query = update.callback_query
+    await query.answer()
+    user = update.effective_user
+    user_id = get_or_create_user(user.id, user.username)
+    user_tz = get_tz_for_user(user.id)
+
+    rows = get_streak_rows(user_id)
+    if not rows:
+        await query.edit_message_text(
+            "🔥 Нет активных лекарств для подсчёта серии.", reply_markup=_nav_keyboard()
+        )
+        return
+
+    today, start_utc, end_utc = streak_window(user_tz)
+    intakes = get_intake_statuses_window(user_id, start_utc, end_utc)
+    subjects = streaks_by_subject(rows, intakes, user_tz, today)
+
+    blocks = ["🔥 <b>Серия идеальных дней</b>",
+              "<i>Идеальный день — все приёмы за день отмечены ✅</i>\n"]
+    for s in subjects:
+        label = escape_html(s["name"]) if s["name"] else "Ты"
+        blocks.append(f"💪 <b>{label}</b>: {_streak_phrase(s['streak'])}")
+
+    await query.edit_message_text(
+        "\n".join(blocks), parse_mode="HTML", reply_markup=_nav_keyboard()
+    )
+
+
+@handle_db_errors
 async def show_week_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает план лекарств на ближайшие 7 дней с учётом frequency, с кнопкой PDF."""
     query = update.callback_query
@@ -332,5 +388,6 @@ def get_handlers():
     return [
         CallbackQueryHandler(show_stats_week, pattern="^stats:week$"),
         CallbackQueryHandler(show_adherence, pattern="^stats:adherence$"),
+        CallbackQueryHandler(show_streak, pattern="^stats:streak$"),
         CallbackQueryHandler(show_week_plan, pattern="^stats:plan$"),
     ]

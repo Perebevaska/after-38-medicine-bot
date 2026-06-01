@@ -55,12 +55,36 @@ async def show_main_menu(update, first_name, hint: str = ""):
     await update.message.reply_text(_main_menu_text(first_name, hint), reply_markup=_main_menu_keyboard())
 
 
+def _owner_streak_hint(telegram_id: int, user_id: int) -> str:
+    """Строка серии владельца для главного меню (F2): '🔥 N дней подряд' или ''.
+
+    Считает только серию владельца (dependent_id=None); подопечные — на экране
+    статистики. Любая ошибка → пустая строка (меню важнее мотивации)."""
+    try:
+        from database import get_streak_rows, get_intake_statuses_window
+        from streak import streak_window, streaks_by_subject
+        from handlers.stats import _streak_phrase
+        rows = get_streak_rows(user_id)
+        if not rows:
+            return ""
+        user_tz = get_tz_for_user(telegram_id)
+        today, start_utc, end_utc = streak_window(user_tz)
+        intakes = get_intake_statuses_window(user_id, start_utc, end_utc)
+        subjects = streaks_by_subject(rows, intakes, user_tz, today)
+        owner = next((s for s in subjects if s["dependent_id"] is None), None)
+        if owner and owner["streak"] > 0:
+            return _streak_phrase(owner["streak"])
+    except Exception:
+        pass
+    return ""
+
+
 @handle_db_errors
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик /menu — единая точка входа: открывает главное меню для навигации."""
     user = update.effective_user
-    get_or_create_user(user.id, user.username)
-    await show_main_menu(update, user.first_name)
+    user_id = get_or_create_user(user.id, user.username)
+    await show_main_menu(update, user.first_name, hint=_owner_streak_hint(user.id, user_id))
 
 
 @handle_db_errors
@@ -73,8 +97,9 @@ async def handle_menu_callback(update, context):
     user = update.effective_user
 
     if action == "main":
+        user_id = get_or_create_user(user.id, user.username)
         await query.edit_message_text(
-            _main_menu_text(user.first_name),
+            _main_menu_text(user.first_name, _owner_streak_hint(user.id, user_id)),
             reply_markup=_main_menu_keyboard()
         )
 
