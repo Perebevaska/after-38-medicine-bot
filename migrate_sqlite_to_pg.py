@@ -84,29 +84,29 @@ INSERT_SQL = {
             time_morning, time_lunch, time_evening, time_night,
             daily_plan_enabled, daily_plan_time, caregiver_enabled, created_at)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT DO NOTHING
     """,
     "dependents": """
         INSERT INTO dependents (id, user_id, name)
         VALUES (%s,%s,%s)
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT DO NOTHING
     """,
     "medications": """
         INSERT INTO medications (id, user_id, name, dosage, meal_relation, times_per_day,
             active, dependent_id, stock_qty, units_per_dose, low_stock_days, paused, created_at)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT DO NOTHING
     """,
     "schedule_rules": """
         INSERT INTO schedule_rules (id, medication_id, reminder_time, frequency,
             interval_days, weekdays, month_day, anchor_date, dosage)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT DO NOTHING
     """,
     "intake_log": """
         INSERT INTO intake_log (id, medication_id, scheduled_time, taken_at, status)
         VALUES (%s,%s,%s,%s,%s)
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT DO NOTHING
     """,
 }
 
@@ -143,7 +143,7 @@ def reset_sequences(conn_pg):
         )
 
 
-def migrate(sqlite_path: str, dsn: str):
+def migrate(sqlite_path: str, dsn: str, clean: bool = False):
     print(f"SQLite:    {sqlite_path}")
     print(f"Postgres:  {dsn.split('@')[-1]}")  # не логируем пароль
     print()
@@ -164,6 +164,15 @@ def migrate(sqlite_path: str, dsn: str):
     print()
 
     with psycopg.connect(dsn, autocommit=False) as conn_pg:
+        if clean:
+            print("Очищаю целевую БД (--clean)...")
+            conn_pg.execute(
+                "TRUNCATE TABLE intake_log, schedule_rules, medications, dependents, users "
+                "RESTART IDENTITY CASCADE"
+            )
+            conn_pg.commit()
+            print()
+
         inserted = {}
         skipped = {}
 
@@ -215,10 +224,12 @@ if __name__ == "__main__":
     parser.add_argument("--sqlite", default="med_bot.db", help="Путь к SQLite-файлу")
     parser.add_argument("--dsn", default=os.getenv("DATABASE_URL"),
                         help="DSN PostgreSQL (по умолчанию — DATABASE_URL из .env)")
+    parser.add_argument("--clean", action="store_true",
+                        help="Очистить целевую БД перед миграцией (TRUNCATE)")
     args = parser.parse_args()
 
     if not args.dsn:
         print("Ошибка: DATABASE_URL не задан и --dsn не указан.", file=sys.stderr)
         sys.exit(1)
 
-    migrate(args.sqlite, args.dsn)
+    migrate(args.sqlite, args.dsn, clean=args.clean)
