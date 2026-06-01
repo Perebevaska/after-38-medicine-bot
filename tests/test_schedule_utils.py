@@ -6,7 +6,7 @@ from datetime import date
 
 from schedule_utils import (
     _rule_fires_today, due_intakes_on, iter_due_by_day,
-    count_due_by_medication, count_due_total,
+    count_due_by_medication, count_due_total, days_of_stock_left,
 )
 
 MON = date(2026, 6, 1)   # понедельник, isoweekday()==1
@@ -89,3 +89,49 @@ def test_rule_fires_today_still_importable_from_scheduler():
     from scheduler import _rule_fires_today as sched_fires
     assert sched_fires is _rule_fires_today
     assert sched_fires(_rule(1, "09:00"), MON) is True
+
+
+# ── days_of_stock_left (F5) ─────────────────────────────────────────────────
+
+def test_stock_daily_one_per_dose():
+    rules = [_rule(1, "09:00")]            # 1 приём/день
+    assert days_of_stock_left(rules, 3, 1, MON) == 3
+
+
+def test_stock_daily_two_doses():
+    rules = [_rule(1, "09:00"), _rule(1, "21:00")]   # 2 приёма/день
+    # 5 таблеток по 1 → день1(2), день2(2), день3 нужно 2, осталось 1 → стоп = 2 дня
+    assert days_of_stock_left(rules, 5, 1, MON) == 2
+
+
+def test_stock_units_per_dose():
+    rules = [_rule(1, "09:00")]            # 1 приём/день, по 2 таблетки
+    assert days_of_stock_left(rules, 4, 2, MON) == 2
+
+
+def test_stock_zero_cannot_cover_today():
+    rules = [_rule(1, "09:00")]
+    assert days_of_stock_left(rules, 0, 1, MON) == 0
+
+
+def test_stock_tracking_off_returns_none():
+    rules = [_rule(1, "09:00")]
+    assert days_of_stock_left(rules, None, 1, MON) is None
+
+
+def test_stock_invalid_units_returns_none():
+    rules = [_rule(1, "09:00")]
+    assert days_of_stock_left(rules, 10, 0, MON) is None
+
+
+def test_stock_horizon_cap():
+    rules = [_rule(1, "09:00", "monthly", month_day=1)]   # раз в месяц
+    # огромный запас — но прогноз ограничен horizon
+    assert days_of_stock_left(rules, 1000, 1, MON, horizon=30) == 30
+
+
+def test_stock_weekly_spans_calendar_days():
+    rules = [_rule(1, "09:00", "weekdays", weekdays="1")]  # только пн
+    # 1 таблетка: today(пн) приём покрыт; следующий пн (через 7 дн) не покрыть.
+    # покрыты дни: пн..вс (7 дней), на 8-й (след. пн) расход 1 > 0 → стоп
+    assert days_of_stock_left(rules, 1, 1, MON) == 7

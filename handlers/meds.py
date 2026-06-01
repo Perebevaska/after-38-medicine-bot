@@ -10,6 +10,7 @@ from database import (get_or_create_user, add_medication, add_schedule_rule,
                       get_caregiver_mode, get_dependents, add_dependent, count_dependents,
                       get_rules_grouped_for_user)
 from scheduler import clear_pending_for_medication
+from schedule_utils import days_of_stock_left
 from constants import (NAME, DOSAGE, MEAL, TIMES, SCHEDULE,
                        EDIT_NAME, EDIT_DOSAGE, EDIT_MEAL, EDIT_TIMES, EDIT_SCHEDULE,
                        FREQ_TYPE, FREQ_INTERVAL, FREQ_WEEKDAYS, FREQ_MONTHDAY,
@@ -446,10 +447,11 @@ async def show_meds_list(message, user):
 
         meal = MEAL_LABELS.get(med["meal_relation"], med["meal_relation"])
         dep_label = f" _({escape_md(med['dependent_name'])})_" if med["dependent_name"] else ""
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✏️ Изменить", callback_data=f"edit:{med['id']}"),
-            InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{med['id']}"),
-        ]])
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✏️ Изменить", callback_data=f"edit:{med['id']}"),
+             InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{med['id']}")],
+            [InlineKeyboardButton("📦 Запас", callback_data=f"stock:{med['id']}")],
+        ])
         text = (
             f"*{escape_md(med['name'])}*{dep_label} — {escape_md(dosage_display)}\n"
             f"🍽 {meal}\n"
@@ -460,6 +462,13 @@ async def show_meds_list(message, user):
             text += schedule_str
         else:
             text += f"⏰ {schedule_str}"
+        if med["stock_qty"] is not None:
+            dleft = days_of_stock_left(rules, med["stock_qty"], med["units_per_dose"], today_local)
+            low = dleft is not None and dleft <= (med["low_stock_days"] or 5)
+            line = f"\n{'⚠️' if low else '📦'} Запас: {med['stock_qty']:g} шт."
+            if dleft is not None:
+                line += f" (~{dleft} дн.)"
+            text += line
         await message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
     await message.reply_text(

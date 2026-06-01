@@ -25,6 +25,8 @@ EDIT_DOSAGE_B = 35
 SELECT_DEPENDENT = 36       # выбор «для кого» в начале add-флоу (caregiver)
 ADD_DEPENDENT_NAME = 37     # ввод имени нового подопечного (caregiver settings + add-флоу)
 
+STOCK_INPUT = 38            # ввод числа в экране «Запас» (F5): остаток/пополнение/единицы/порог
+
 CANCEL_TIP = "_(/cancel для отмены)_"
 
 ABOUT_TEXT = (

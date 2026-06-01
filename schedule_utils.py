@@ -60,3 +60,30 @@ def count_due_by_medication(rows, start_day: date, end_day: date) -> dict:
 def count_due_total(rows, start_day: date, end_day: date) -> int:
     """Всего положенных приёмов за период [start_day, end_day] (знаменатель adherence)."""
     return sum(len(intakes) for _day, intakes in iter_due_by_day(rows, start_day, end_day))
+
+
+def days_of_stock_left(rules, stock_qty, units_per_dose, today: date, horizon: int = 365):
+    """Сколько календарных дней (начиная с today) хватит запаса при текущем расписании (F5).
+
+    rules — правила ОДНОГО лекарства; stock_qty — остаток в единицах;
+    units_per_dose — расход за один приём. Возвращает число дней, целиком покрытых
+    запасом (день без приёмов тоже «покрыт»); прерывается на первом дне, чей расход
+    не покрыть. horizon — потолок прогноза (дней). None если трекинг выключен
+    (stock_qty is None) или некорректный units_per_dose.
+    """
+    if stock_qty is None or units_per_dose is None or units_per_dose <= 0:
+        return None
+    remaining = stock_qty
+    days = 0
+    day = today
+    for _ in range(horizon):
+        due = sum(1 for r in rules if _rule_fires_today(r, day))
+        need = due * units_per_dose
+        if need > 0:
+            if remaining >= need:
+                remaining -= need
+            else:
+                break
+        days += 1
+        day += timedelta(days=1)
+    return days
