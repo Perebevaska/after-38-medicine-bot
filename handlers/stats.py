@@ -38,6 +38,15 @@ def _report_keyboard(export_cb: str) -> InlineKeyboardMarkup:
     ])
 
 
+def _adherence_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура под экраном соблюдения: PDF-отчёт для врача (календарь) + навигация."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🩺 Отчёт для врача (PDF)", callback_data="export:doctor")],
+        [InlineKeyboardButton("◀️ Период", callback_data="menu:stats"),
+         InlineKeyboardButton("🏠 В меню", callback_data="menu:main")],
+    ])
+
+
 def _nav_keyboard() -> InlineKeyboardMarkup:
     """Навигация под пустым отчётом: к выбору периода + в меню."""
     return InlineKeyboardMarkup([[
@@ -261,7 +270,7 @@ async def show_adherence(update: Update, context: ContextTypes.DEFAULT_TYPE):
     blocks.append(f"<b>Итог: {total_taken}/{total_planned} ({overall}%) {_pct_color(overall)}</b>")
 
     await query.edit_message_text(
-        "\n".join(blocks), parse_mode="HTML", reply_markup=_report_keyboard("export:adherence")
+        "\n".join(blocks), parse_mode="HTML", reply_markup=_adherence_keyboard()
     )
 
 

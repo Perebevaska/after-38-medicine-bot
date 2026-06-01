@@ -604,6 +604,22 @@ def get_adherence_rules(user_id: int) -> list:
         ).fetchall()
 
 
+def get_taken_intakes(user_id: int, start_utc: str, end_utc: str) -> list:
+    """(medication_id, taken_at) для status='taken' в окне — для календаря отчёта врача (F1).
+
+    taken_at в UTC; потребитель конвертирует в локальную дату пользователя и бакетит по дням.
+    """
+    with get_connection() as conn:
+        return conn.execute(
+            """SELECT i.medication_id AS mid, i.taken_at
+               FROM intake_log i
+               JOIN medications m ON m.id = i.medication_id
+               WHERE m.user_id = ? AND i.status = 'taken'
+                 AND i.taken_at >= ? AND i.taken_at < ?""",
+            (user_id, start_utc, end_utc)
+        ).fetchall()
+
+
 def get_taken_counts(user_id: int, start_utc: str, end_utc: str) -> dict:
     """{medication_id: число приёмов status='taken' за [start_utc, end_utc)} — числитель adherence (F3)."""
     with get_connection() as conn:

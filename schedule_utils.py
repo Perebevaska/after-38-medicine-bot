@@ -67,6 +67,22 @@ def count_due_by_medication(rows, start_day: date, end_day: date,
     return counts
 
 
+def due_by_med_day(rows, start_day: date, end_day: date, created_dates: dict = None) -> dict:
+    """{(medication_id, day): число положенных приёмов} по дням (для календаря отчёта врача, F1).
+
+    created_dates (опц.) — кламп по дате создания лекарства (как в count_due_by_medication).
+    """
+    out: dict = {}
+    for day, intakes in iter_due_by_day(rows, start_day, end_day):
+        for mid, _time in intakes:
+            if created_dates is not None:
+                cd = created_dates.get(mid)
+                if cd is not None and day < cd:
+                    continue
+            out[(mid, day)] = out.get((mid, day), 0) + 1
+    return out
+
+
 def count_due_total(rows, start_day: date, end_day: date) -> int:
     """Всего положенных приёмов за период [start_day, end_day] (знаменатель adherence)."""
     return sum(len(intakes) for _day, intakes in iter_due_by_day(rows, start_day, end_day))
