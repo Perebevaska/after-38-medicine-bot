@@ -35,10 +35,16 @@ async def post_init(app):
 
     В списке только /menu — единая точка входа. /cancel остаётся рабочим
     как fallback диалогов (выход из текстового ввода), но скрыт из меню.
+
+    Обёрнуто в try/except: транзиентный тайм-аут сети при старте не должен
+    ронять бота — команды переустановятся при следующем перезапуске.
     """
-    await app.bot.set_my_commands([
-        BotCommand("menu", "🏠 Меню"),
-    ])
+    try:
+        await app.bot.set_my_commands([
+            BotCommand("menu", "🏠 Меню"),
+        ])
+    except Exception as e:
+        logger.warning("Не удалось установить команды бота (транзиентно): %s", e)
 
 
 async def error_handler(update, context):
@@ -53,7 +59,19 @@ def main():
     """Точка входа: инициализирует БД, регистрирует все handlers, запускает бота."""
     init_db()
     migrate()
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    # Увеличенные таймауты: дефолтные 5с часто срабатывают на нестабильной
+    # сети (в т.ч. WSL) и дают telegram.error.TimedOut.
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .connect_timeout(20.0)
+        .read_timeout(20.0)
+        .write_timeout(20.0)
+        .pool_timeout(20.0)
+        .get_updates_read_timeout(42.0)
+        .build()
+    )
 
     cancel_handler = CommandHandler("cancel", cancel)
 
