@@ -104,6 +104,7 @@ def _presets_keyboard(presets: dict) -> InlineKeyboardMarkup:
             f"✏️ {SLOT_LABELS[slot]}: {presets[slot]}",
             callback_data=f"preset:{slot}"
         )])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="settings:back")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -143,7 +144,7 @@ async def handle_show_presets(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     user = update.effective_user
     presets = get_user_time_presets(user.id)
-    await query.message.reply_text(
+    await query.edit_message_text(
         "⏰ *Время приёмов*\n\nНажми чтобы изменить:",
         parse_mode="Markdown",
         reply_markup=_presets_keyboard(presets)
@@ -344,6 +345,20 @@ async def handle_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TY
 @handle_db_errors
 async def handle_delete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отменяет удаление данных и возвращается на страницу настроек."""
+    query = update.callback_query
+    await query.answer()
+    user = update.effective_user
+    tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
+    await query.edit_message_text(
+        _settings_text(tz, mode_label, presets, dp, cg),
+        parse_mode="Markdown",
+        reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
+    )
+
+
+@handle_db_errors
+async def handle_settings_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат на главную страницу настроек из под-экранов (пресеты и т.п.)."""
     query = update.callback_query
     await query.answer()
     user = update.effective_user

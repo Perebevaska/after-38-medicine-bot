@@ -12,13 +12,18 @@ from constants import SETUP_TZ, SETUP_CITY
 from utils import handle_db_errors, get_tz_for_user, escape_md, local_day_bounds_utc
 
 
-def _geo_keyboard() -> ReplyKeyboardMarkup:
-    """Клавиатура запроса геолокации или ручного ввода города."""
-    return ReplyKeyboardMarkup(
-        [[KeyboardButton("📍 Отправить геолокацию", request_location=True)],
-         [KeyboardButton("✍️ Ввести город вручную")]],
-        resize_keyboard=True, one_time_keyboard=True
-    )
+def _geo_keyboard(with_back: bool = False) -> ReplyKeyboardMarkup:
+    """Клавиатура запроса геолокации или ручного ввода города.
+
+    with_back=True добавляет кнопку «◀️ Назад» (для входа из /settings и /timezone).
+    """
+    rows = [
+        [KeyboardButton("📍 Отправить геолокацию", request_location=True)],
+        [KeyboardButton("✍️ Ввести город вручную")],
+    ]
+    if with_back:
+        rows.append([KeyboardButton("◀️ Назад в настройки")])
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=True)
 
 
 def _main_menu_keyboard():
@@ -145,7 +150,7 @@ async def timezone_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик /timezone: запускает флоу смены часового пояса."""
     await update.message.reply_text(
         "Отправь геолокацию или введи город:",
-        reply_markup=_geo_keyboard()
+        reply_markup=_geo_keyboard(with_back=True)
     )
     return SETUP_TZ
 
@@ -156,14 +161,32 @@ async def handle_settings_timezone(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     await query.message.reply_text(
         "Отправь геолокацию или введи город:",
-        reply_markup=_geo_keyboard()
+        reply_markup=_geo_keyboard(with_back=True)
     )
     return SETUP_TZ
 
 
+async def _back_to_settings_from_tz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Закрывает флоу TZ и возвращает пользователя на страницу /settings."""
+    from handlers.settings import fetch_settings_data, _settings_text, _settings_keyboard
+    user = update.effective_user
+    tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
+    # Сначала убираем reply-клавиатуру отдельным сообщением, затем рисуем настройки.
+    await update.message.reply_text("⚙️ Возврат в настройки", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(
+        _settings_text(tz, mode_label, presets, dp, cg),
+        parse_mode="Markdown",
+        reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
+    )
+    return ConversationHandler.END
+
+
 async def handle_tz_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Маршрутизирует текстовый ввод: «Ввести город вручную» → SETUP_CITY, иначе → handle_city_input."""
-    if update.message.text == "✍️ Ввести город вручную":
+    """Маршрутизирует текстовый ввод: «Назад» → /settings, «Ввести город» → SETUP_CITY, иначе → геокодинг."""
+    text = update.message.text
+    if text == "◀️ Назад в настройки":
+        return await _back_to_settings_from_tz(update, context)
+    if text == "✍️ Ввести город вручную":
         await update.message.reply_text(
             "Введи название города (можно на русском):",
             reply_markup=ReplyKeyboardRemove()

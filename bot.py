@@ -92,6 +92,7 @@ def main():
     app.add_handler(settings.get_preset_handler(cancel_handler))
     app.add_handler(settings.get_daily_plan_time_handler(cancel_handler))
     app.add_handler(CallbackQueryHandler(settings.handle_show_presets, pattern="^settings:presets$"))
+    app.add_handler(CallbackQueryHandler(settings.handle_settings_back, pattern="^settings:back$"))
     app.add_handler(CallbackQueryHandler(settings.handle_daily_plan_settings, pattern="^settings:daily_plan$"))
     app.add_handler(CallbackQueryHandler(settings.handle_daily_plan_toggle, pattern="^daily_plan:toggle$"))
     app.add_handler(CallbackQueryHandler(settings.handle_daily_plan_back, pattern="^daily_plan:back$"))

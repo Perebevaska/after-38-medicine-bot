@@ -237,6 +237,7 @@ ADMIN_ID=telegram_id_админа
 | 44 | `database.py`, `scheduler.py` | Планировщик делал 2 full-scan/мин (`get_all_schedules` + `get_users_with_daily_plan`). Объединено в `get_active_schedule_rows()` — один проход |
 | 45 | `database.py`, `handlers/settings.py` | `fetch_settings_data` открывала 5 соединений на рендер. Сведено к одному `get_user_settings_row()` |
 | 46 | `database.py`, `handlers/meds.py` | Список лекарств делал N+1 (`get_schedules_by_medication` в цикле). Заменено на `get_rules_grouped_for_user()` |
+| 47 | `handlers/settings.py`, `handlers/timezone.py`, `bot.py` | Из под-экранов `/settings` (часовой пояс, время приёмов) нельзя вернуться в настройки. Добавлены «◀️ Назад»: `settings:back` для пресетов, reply-кнопка «◀️ Назад в настройки» для гео-флоу (`with_back`) |
 
 ### 🔲 К исправлению
 
