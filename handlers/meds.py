@@ -8,7 +8,7 @@ from database import (get_or_create_user, add_medication, add_schedule_rule,
                       get_medication_by_id, get_schedules_by_medication, update_medication,
                       count_active_medications, get_user_time_presets,
                       get_caregiver_mode, get_dependents, add_dependent, count_dependents,
-                      get_rules_grouped_for_user)
+                      get_rules_grouped_for_user, set_medication_paused)
 from scheduler import clear_pending_for_medication
 from schedule_utils import days_of_stock_left
 from constants import (NAME, DOSAGE, MEAL, TIMES, SCHEDULE,
@@ -409,8 +409,73 @@ def _next_fire_label(rule, today: date) -> str:
 
 # ── Display ────────────────────────────────────────────────────────────────
 
+def _med_card_text(med, rules, today_local) -> str:
+    """Текст карточки лекарства для списка: название, дозировки, расписание, запас, пометка паузы."""
+    has_advanced = any(r["frequency"] != "daily" for r in rules)
+    is_multi_dosage = any(r["dosage"] for r in rules)
+
+    dosages = [med["dosage"]]
+    for r in rules:
+        if r["dosage"] and r["dosage"] not in dosages:
+            dosages.append(r["dosage"])
+    dosage_display = " / ".join(dosages)
+
+    if is_multi_dosage:
+        rule_strs = []
+        for r in rules:
+            effective = r["dosage"] if r["dosage"] else med["dosage"]
+            label = _next_fire_label(r, today_local)
+            rule_strs.append(f"⏰ {_format_schedule_rule(r)} — {escape_md(effective)}{label}")
+        schedule_str = "\n".join(rule_strs) or "не указано"
+    elif not has_advanced:
+        schedule_str = ", ".join(r["reminder_time"] for r in rules) or "не указано"
+    else:
+        schedule_str = "\n".join(_format_schedule_rule(r) for r in rules) or "не указано"
+
+    meal = MEAL_LABELS.get(med["meal_relation"], med["meal_relation"])
+    dep_label = f" _({escape_md(med['dependent_name'])})_" if med["dependent_name"] else ""
+    paused_mark = "  ⏸ _на паузе_" if med["paused"] else ""
+    text = (
+        f"*{escape_md(med['name'])}*{dep_label} — {escape_md(dosage_display)}{paused_mark}\n"
+        f"🍽 {meal}\n"
+    )
+    if not has_advanced and not is_multi_dosage:
+        text += f"🔢 {med['times_per_day']} раз в день\n"
+    if is_multi_dosage:
+        text += schedule_str
+    else:
+        text += f"⏰ {schedule_str}"
+    if med["stock_qty"] is not None:
+        dleft = days_of_stock_left(rules, med["stock_qty"], med["units_per_dose"], today_local)
+        low = dleft is not None and dleft <= (med["low_stock_days"] or 5)
+        line = f"\n{'⚠️' if low else '📦'} Запас: {med['stock_qty']:g} шт."
+        if dleft is not None:
+            line += f" (~{dleft} дн.)"
+        text += line
+    return text
+
+
+def _med_card_keyboard(med_id: int, paused: bool, *, is_last: bool = False,
+                       with_menu: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура карточки лекарства: Изменить/Удалить, Запас + Пауза/Возобновить, опц. Добавить/Меню."""
+    pause_btn = (InlineKeyboardButton("▶️ Возобновить", callback_data=f"med_resume:{med_id}")
+                 if paused else
+                 InlineKeyboardButton("⏸ Пауза", callback_data=f"med_pause:{med_id}"))
+    rows = [
+        [InlineKeyboardButton("✏️ Изменить", callback_data=f"edit:{med_id}"),
+         InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{med_id}")],
+        [InlineKeyboardButton("📦 Запас", callback_data=f"stock:{med_id}"), pause_btn],
+    ]
+    if is_last:
+        rows.append([InlineKeyboardButton("➕ Добавить лекарство", callback_data="add_med")])
+        rows.append([InlineKeyboardButton("◀️ В меню", callback_data="menu:main")])
+    elif with_menu:
+        rows.append([InlineKeyboardButton("◀️ В меню", callback_data="menu:main")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def show_meds_list(message, user):
-    """Отображает список активных лекарств пользователя с расписанием и кнопками Изменить/Удалить."""
+    """Отображает список активных лекарств пользователя с расписанием и кнопками Изменить/Удалить/Пауза."""
     user_id = get_or_create_user(user.id, user.username)
     meds = get_user_medications(user_id)
     user_tz = get_tz_for_user(user.id)
@@ -431,57 +496,8 @@ async def show_meds_list(message, user):
     last_idx = len(meds) - 1
     for i, med in enumerate(meds):
         rules = rules_by_med.get(med["id"], [])
-        has_advanced = any(r["frequency"] != "daily" for r in rules)
-
-        is_multi_dosage = any(r["dosage"] for r in rules)
-
-        # Собираем уникальные дозировки для заголовка
-        dosages = [med["dosage"]]
-        for r in rules:
-            if r["dosage"] and r["dosage"] not in dosages:
-                dosages.append(r["dosage"])
-        dosage_display = " / ".join(dosages)
-
-        if is_multi_dosage:
-            rule_strs = []
-            for r in rules:
-                effective = r["dosage"] if r["dosage"] else med["dosage"]
-                label = _next_fire_label(r, today_local)
-                rule_strs.append(f"⏰ {_format_schedule_rule(r)} — {escape_md(effective)}{label}")
-            schedule_str = "\n".join(rule_strs) or "не указано"
-        elif not has_advanced:
-            schedule_str = ", ".join(r["reminder_time"] for r in rules) or "не указано"
-        else:
-            schedule_str = "\n".join(_format_schedule_rule(r) for r in rules) or "не указано"
-
-        meal = MEAL_LABELS.get(med["meal_relation"], med["meal_relation"])
-        dep_label = f" _({escape_md(med['dependent_name'])})_" if med["dependent_name"] else ""
-        kb_rows = [
-            [InlineKeyboardButton("✏️ Изменить", callback_data=f"edit:{med['id']}"),
-             InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{med['id']}")],
-            [InlineKeyboardButton("📦 Запас", callback_data=f"stock:{med['id']}")],
-        ]
-        if i == last_idx:
-            kb_rows.append([InlineKeyboardButton("➕ Добавить лекарство", callback_data="add_med")])
-            kb_rows.append([InlineKeyboardButton("◀️ В меню", callback_data="menu:main")])
-        keyboard = InlineKeyboardMarkup(kb_rows)
-        text = (
-            f"*{escape_md(med['name'])}*{dep_label} — {escape_md(dosage_display)}\n"
-            f"🍽 {meal}\n"
-        )
-        if not has_advanced and not is_multi_dosage:
-            text += f"🔢 {med['times_per_day']} раз в день\n"
-        if is_multi_dosage:
-            text += schedule_str
-        else:
-            text += f"⏰ {schedule_str}"
-        if med["stock_qty"] is not None:
-            dleft = days_of_stock_left(rules, med["stock_qty"], med["units_per_dose"], today_local)
-            low = dleft is not None and dleft <= (med["low_stock_days"] or 5)
-            line = f"\n{'⚠️' if low else '📦'} Запас: {med['stock_qty']:g} шт."
-            if dleft is not None:
-                line += f" (~{dleft} дн.)"
-            text += line
+        text = _med_card_text(med, rules, today_local)
+        keyboard = _med_card_keyboard(med["id"], bool(med["paused"]), is_last=(i == last_idx))
         await message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
 
@@ -1419,6 +1435,34 @@ async def handle_delete_callback(update: Update, context: ContextTypes.DEFAULT_T
     deactivate_medication(medication_id, user_id)
     clear_pending_for_medication(medication_id)
     await query.edit_message_text("✅ Лекарство удалено из списка, напоминания отключены.")
+
+
+@handle_db_errors
+async def handle_pause_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ставит лекарство на паузу / снимает с паузы (F4) и перерисовывает карточку."""
+    query = update.callback_query
+    await query.answer()
+    action, mid_str = query.data.split(":")
+    medication_id = int(mid_str)
+    paused = (action == "med_pause")
+    user = update.effective_user
+    user_id = get_or_create_user(user.id, user.username)
+    set_medication_paused(medication_id, user_id, paused)
+    if paused:
+        clear_pending_for_medication(medication_id)
+
+    med = next((m for m in get_user_medications(user_id) if m["id"] == medication_id), None)
+    if med is None:
+        await query.edit_message_text("Лекарство не найдено.")
+        return
+    user_tz = get_tz_for_user(user.id)
+    today_local = datetime.now(user_tz).date()
+    rules = get_rules_grouped_for_user(user_id).get(medication_id, [])
+    await query.edit_message_text(
+        _med_card_text(med, rules, today_local),
+        parse_mode="Markdown",
+        reply_markup=_med_card_keyboard(medication_id, bool(med["paused"]), with_menu=True),
+    )
 
 
 @handle_db_errors

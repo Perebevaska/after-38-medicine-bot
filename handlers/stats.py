@@ -23,8 +23,8 @@ def _stats_period_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора периода статистики с возвратом в меню."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📈 За 7 дней", callback_data="stats:week")],
-        [InlineKeyboardButton("📊 Соблюдение за 30 дней", callback_data="stats:adherence")],
         [InlineKeyboardButton("📆 План на 7 дней", callback_data="stats:plan")],
+        [InlineKeyboardButton("📊 Соблюдение за 30 дней", callback_data="stats:adherence")],
         [InlineKeyboardButton("◀️ В меню", callback_data="menu:main")],
     ])
 

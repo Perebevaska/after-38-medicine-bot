@@ -99,6 +99,7 @@ def main():
     app.add_handler(CommandHandler("meds", meds.meds_command))
     app.add_handler(meds.get_edit_handler(cancel_handler))
     app.add_handler(CallbackQueryHandler(meds.handle_delete_callback, pattern="^delete:"))
+    app.add_handler(CallbackQueryHandler(meds.handle_pause_toggle, pattern="^med_(pause|resume):"))
     app.add_handler(CommandHandler("stats", stats.stats_command))
     app.add_handler(CommandHandler("settings", settings.settings_command))
     app.add_handler(CommandHandler("about", settings.about_command))
