@@ -1,9 +1,12 @@
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from database import get_active_schedule_rows, log_intake
 from utils import escape_md, get_tz_for_user, local_day_bounds_utc
+# _rule_fires_today живёт в schedule_utils (чистая логика, без telegram/db);
+# реэкспорт для обратной совместимости: stats/export/timezone импортируют его отсюда.
+from schedule_utils import _rule_fires_today
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +27,6 @@ def clear_pending_for_medication(medication_id: int):
     """Удаляет все pending-записи для указанного лекарства (вызывается при деактивации)."""
     for key in [k for k in _pending if k[1] == medication_id]:
         del _pending[key]
-
-
-def _rule_fires_today(row, today_local: date) -> bool:
-    """Проверяет, должно ли правило сработать сегодня."""
-    freq = row["frequency"]
-    if freq == "daily":
-        return True
-    if freq == "weekdays":
-        days = [int(d) for d in (row["weekdays"] or "").split(",") if d]
-        return today_local.isoweekday() in days
-    if freq == "monthly":
-        return today_local.day == row["month_day"]
-    if freq == "interval":
-        anchor_str = row["anchor_date"]
-        if not anchor_str:
-            return False
-        anchor = date.fromisoformat(anchor_str)
-        return (today_local - anchor).days % row["interval_days"] == 0
-    return False
 
 
 def _prune_pending(now_utc: datetime):

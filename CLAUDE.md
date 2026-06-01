@@ -21,6 +21,7 @@ med-bot/
 ├── bot.py              # точка входа — только main() + регистрация handlers
 ├── database.py         # SQLite CRUD через get_connection()
 ├── scheduler.py        # send_reminders() каждую минуту
+├── schedule_utils.py   # чистая логика «положенных приёмов» (_rule_fires_today + due/count хелперы)
 ├── constants.py        # States, MEAL_LABELS, MONTHS_GEN, MAX_MEDICATIONS_PER_USER
 ├── utils.py            # handle_db_errors, get_tz_for_user, cancel, escape_md, parse_time
 ├── broadcast.py        # standalone скрипт рассылки (python3 broadcast.py)
@@ -138,6 +139,7 @@ pytest -q
 - `tests/test_handlers.py` — характеризационные тесты save-хендлеров (add/edit × daily/interval/weekdays/monthly): фиксируют текст «✅ Лекарство добавлено/обновлено» и валидацию диапазонов; БД мокается в namespace `handlers.meds`, Telegram заменён фейками
 - `tests/test_menu.py` — навигация меню (`menu:main`/`about`/`stats`) и наличие кнопок «◀️ В меню»
 - `tests/test_conv_structure.py` — снапшот структуры `get_add_handler`/`get_edit_handler` (состояния, callback'и, паттерны); защищает дедуп общих состояний (`_schedule_input_states`)
+- `tests/test_schedule_utils.py` — «положенные приёмы» за день/период (`due_intakes_on`, `iter_due_by_day`, `count_due_*`) + реэкспорт `_rule_fires_today`
 - Не трогают реальную БД и сеть — функции/хендлеры вызываются напрямую
 - Конфиг — `pytest.ini` (`testpaths = tests`); dev-зависимости — `requirements-dev.txt`
 - **Перед рефакторингом хендлеров**: запусти `pytest` до и после — `test_handlers.py` ловит изменения текста сообщений
@@ -270,6 +272,8 @@ ADMIN_ID=telegram_id_админа
 |---|------|----------|
 
 ### 💡 В планах (фичи)
+
+> **Фундамент готов**: `schedule_utils.py` — чистая логика «положенных приёмов» (`due_intakes_on`, `iter_due_by_day`, `count_due_by_medication`, `count_due_total`). База для F2/F3/F5. `_rule_fires_today` перенесён туда из `scheduler.py` (реэкспортируется для совместимости). Покрыто `tests/test_schedule_utils.py`. ⚠️ Потребители аналитики должны сами ограничивать период началом действия лекарства (хелпер применяет правило к любой дате).
 
 | # | Файл | Описание |
 |---|------|----------|
