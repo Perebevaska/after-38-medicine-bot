@@ -33,12 +33,8 @@ logger = logging.getLogger(__name__)
 async def post_init(app):
     """Регистрирует команды бота в меню Telegram после запуска."""
     await app.bot.set_my_commands([
-        BotCommand("start",    "🏠 Главное меню"),
-        BotCommand("meds",     "💊 Мои лекарства"),
-        BotCommand("stats",    "📊 Статистика"),
-        BotCommand("settings", "⚙️ Настройки"),
-        BotCommand("about",    "ℹ️ О проекте"),
-        BotCommand("cancel",   "❌ Отменить действие"),
+        BotCommand("menu",   "🏠 Меню"),
+        BotCommand("cancel", "❌ Отменить действие"),
     ])
 
 
@@ -77,6 +73,7 @@ def main():
     )
 
     app.add_handler(setup_tz_handler)
+    app.add_handler(CommandHandler("menu", tz_handler.menu_command))
     app.add_handler(meds.get_add_handler(cancel_handler))
     app.add_handler(CommandHandler("meds", meds.meds_command))
     app.add_handler(meds.get_edit_handler(cancel_handler))

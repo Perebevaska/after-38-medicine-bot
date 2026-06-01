@@ -11,13 +11,35 @@ from scheduler import _rule_fires_today
 _WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик /stats: показывает выбор периода статистики."""
-    keyboard = InlineKeyboardMarkup([
+def _stats_period_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора периода статистики с возвратом в меню."""
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton("📈 За 7 дней", callback_data="stats:week")],
         [InlineKeyboardButton("📆 План на 7 дней", callback_data="stats:plan")],
+        [InlineKeyboardButton("◀️ В меню", callback_data="menu:main")],
     ])
-    await update.message.reply_text("Выбери период:", reply_markup=keyboard)
+
+
+def _report_keyboard(export_cb: str) -> InlineKeyboardMarkup:
+    """Клавиатура под отчётом: скачать PDF + назад к выбору периода + в меню."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📄 Скачать PDF", callback_data=export_cb)],
+        [InlineKeyboardButton("◀️ Период", callback_data="menu:stats"),
+         InlineKeyboardButton("🏠 В меню", callback_data="menu:main")],
+    ])
+
+
+def _nav_keyboard() -> InlineKeyboardMarkup:
+    """Навигация под пустым отчётом: к выбору периода + в меню."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("◀️ Период", callback_data="menu:stats"),
+        InlineKeyboardButton("🏠 В меню", callback_data="menu:main"),
+    ]])
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик /stats: показывает выбор периода статистики."""
+    await update.message.reply_text("Выбери период:", reply_markup=_stats_period_keyboard())
 
 
 @handle_db_errors
@@ -97,7 +119,7 @@ async def show_stats_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows = get_history_detailed(user_id, since_utc)
 
     if not rows:
-        await query.edit_message_text("За последние 7 дней нет данных.")
+        await query.edit_message_text("За последние 7 дней нет данных.", reply_markup=_nav_keyboard())
         return
 
     # day_str → {med_name → [intake_str, ...]}
@@ -139,12 +161,7 @@ async def show_stats_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "\n".join(blocks)
     if len(text) > 4000:
         text = text[:3900] + "\n\n⚠️ <i>Показаны не все данные — слишком большая история.</i>"
-    await query.edit_message_text(
-        text, parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("📄 Скачать PDF", callback_data="export:week")
-        ]])
-    )
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=_report_keyboard("export:week"))
 
 
 @handle_db_errors
@@ -158,7 +175,7 @@ async def show_week_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rows = get_schedules_for_user(user.id)
     if not rows:
-        await query.edit_message_text("💊 Нет активных лекарств.")
+        await query.edit_message_text("💊 Нет активных лекарств.", reply_markup=_nav_keyboard())
         return
 
     blocks = ["📆 <b>План на 7 дней</b>\n"]
@@ -189,18 +206,15 @@ async def show_week_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         blocks.append("")
 
     if len(blocks) == 2:
-        await query.edit_message_text("💊 В ближайшие 7 дней нет запланированных лекарств.")
+        await query.edit_message_text(
+            "💊 В ближайшие 7 дней нет запланированных лекарств.", reply_markup=_nav_keyboard()
+        )
         return
 
     text = "\n".join(blocks).rstrip()
     if len(text) > 4000:
         text = text[:3900] + "\n\n⚠️ <i>Показаны не все данные.</i>"
-    await query.edit_message_text(
-        text, parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("📄 Скачать PDF", callback_data="export:plan")
-        ]])
-    )
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=_report_keyboard("export:plan"))
 
 
 def get_handlers():

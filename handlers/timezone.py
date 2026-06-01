@@ -37,29 +37,50 @@ def _main_menu_keyboard():
     ])
 
 
-async def show_main_menu(update, first_name, hint: str = ""):
-    """Отправляет приветственное сообщение с главным меню. hint — опциональная подсказка."""
+def back_menu_kb() -> InlineKeyboardMarkup:
+    """Кнопка «◀️ В меню» — возврат в главное меню (callback menu:main)."""
+    return InlineKeyboardMarkup([[InlineKeyboardButton("◀️ В меню", callback_data="menu:main")]])
+
+
+def _main_menu_text(first_name: str, hint: str = "") -> str:
+    """Текст приветствия главного меню."""
     text = f"Привет, {first_name}! 💊\n\nЯ помогу тебе не забывать принимать лекарства."
     if hint:
         text += f"\n\n{hint}"
-    await update.message.reply_text(text, reply_markup=_main_menu_keyboard())
+    return text
+
+
+async def show_main_menu(update, first_name, hint: str = ""):
+    """Отправляет приветственное сообщение с главным меню. hint — опциональная подсказка."""
+    await update.message.reply_text(_main_menu_text(first_name, hint), reply_markup=_main_menu_keyboard())
+
+
+@handle_db_errors
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик /menu — единая точка входа: открывает главное меню для навигации."""
+    user = update.effective_user
+    get_or_create_user(user.id, user.username)
+    await show_main_menu(update, user.first_name)
 
 
 @handle_db_errors
 async def handle_menu_callback(update, context):
-    """Обрабатывает нажатия кнопок главного меню (menu:today/meds/stats/settings/about)."""
+    """Навигация по главному меню (edit-in-place): menu:main/today/meds/stats/settings/about."""
     query = update.callback_query
     await query.answer()
     action = query.data.split(":")[1]
     msg = query.message
     user = update.effective_user
 
-    if action == "today":
+    if action == "main":
+        await query.edit_message_text(
+            _main_menu_text(user.first_name),
+            reply_markup=_main_menu_keyboard()
+        )
+
+    elif action == "today":
         from scheduler import _rule_fires_today, _MEAL_LABELS
         rows = get_schedules_for_user(user.id)
-        if not rows:
-            await msg.reply_text("💊 Сегодня нет запланированных лекарств.")
-            return
         user_tz = get_tz_for_user(user.id)
         now_local = datetime.now(user_tz)
         today = now_local.date()
@@ -74,7 +95,10 @@ async def handle_menu_callback(update, context):
             dosage = row["rule_dosage"] or row["med_dosage"]
             meds[mid]["times"].append((row["reminder_time"], mid, dosage))
         if not meds:
-            await msg.reply_text("💊 Сегодня нет запланированных лекарств.")
+            await query.edit_message_text(
+                "💊 Сегодня нет запланированных лекарств.",
+                reply_markup=back_menu_kb()
+            )
             return
         start_utc, end_utc = local_day_bounds_utc(user_tz, now_local)
         statuses = get_today_intake_statuses(user.id, start_utc, end_utc)
@@ -87,35 +111,33 @@ async def handle_menu_callback(update, context):
                 st = statuses.get((mid, reminder_time))
                 icon = "✅" if st == "taken" else ("❌" if st == "skipped" else "⏳")
                 lines.append(f"   {icon} {reminder_time} — {escape_md(dosage)}")
-        await msg.reply_text("\n".join(lines), parse_mode="Markdown")
+        await query.edit_message_text(
+            "\n".join(lines), parse_mode="Markdown", reply_markup=back_menu_kb()
+        )
 
     elif action == "meds":
         from handlers.meds import show_meds_list
         await show_meds_list(msg, user)
 
     elif action == "stats":
-        await msg.reply_text(
-            "Выбери период:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📈 За 7 дней", callback_data="stats:week")],
-                [InlineKeyboardButton("📆 План на 7 дней", callback_data="stats:plan")],
-            ])
-        )
+        from handlers.stats import _stats_period_keyboard
+        await query.edit_message_text("Выбери период:", reply_markup=_stats_period_keyboard())
 
     elif action == "settings":
         from handlers.settings import _settings_text, _settings_keyboard, fetch_settings_data
         tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
-        await msg.reply_text(
+        await query.edit_message_text(
             _settings_text(tz, mode_label, presets, dp, cg),
             parse_mode="Markdown",
             reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
         )
 
     elif action == "about":
-        await msg.reply_text(
+        await query.edit_message_text(
             ABOUT_TEXT,
             parse_mode="Markdown",
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            reply_markup=back_menu_kb()
         )
 
 

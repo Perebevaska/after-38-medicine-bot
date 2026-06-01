@@ -60,6 +60,7 @@ def _settings_keyboard(mode_label: str, daily_plan: dict,
     ]
     if telegram_id == ADMIN_ID:
         rows.append([InlineKeyboardButton("🔧 Админ панель", callback_data="admin:panel")])
+    rows.append([InlineKeyboardButton("◀️ В меню", callback_data="menu:main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -375,7 +376,10 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         ABOUT_TEXT,
         parse_mode="Markdown",
-        disable_web_page_preview=True
+        disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ В меню", callback_data="menu:main")
+        ]])
     )
 
 

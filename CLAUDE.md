@@ -178,7 +178,10 @@ ADMIN_ID=telegram_id_админа
 - Напоминания в local time пользователя (хранится в `users.timezone`)
 - Режим напоминаний: `once` или `repeat` (каждые 5 минут до подтверждения, до 2 часов)
 - Лимит лекарств: `MAX_MEDICATIONS_PER_USER = 10` (задан в `constants.py`)
-- Главное меню `/start` — inline-кнопки: 📋 Лекарства на сегодня, 💊 Мои лекарства, 📊 Статистика, ⚙️ Настройки, ℹ️ О проекте
+- **Единая точка входа `/menu`** (`menu_command` в `timezone.py`): открывает главное меню. В списке команд бота (`post_init`) только `menu` + `cancel`; `/start` оставлен для онбординга (TZ), команды `/meds`/`/stats`/`/settings`/`/about` работают, но скрыты из меню
+- **Навигация edit-in-place**: пункты меню (`menu:today/meds/stats/settings/about`) редактируют текущее сообщение; `menu:main` возвращает главное меню. Все под-экраны имеют «◀️ В меню» (`back_menu_kb()` в `timezone.py`, `_stats_period_keyboard`/`_report_keyboard`/`_nav_keyboard` в `stats.py`, кнопка в `_settings_keyboard`, в списке лекарств). Слой навигации — глобальный handler `^menu:`, вне диалогов add/edit (не задевается Q1b)
+- Главное меню — inline-кнопки: 📋 Лекарства на сегодня, 💊 Мои лекарства, 📊 Статистика, ⚙️ Настройки, ℹ️ О проекте
+- **Мои лекарства** — многосообщенный список; «◀️ В меню» на завершающем сообщении (`show_meds_list`)
 - **Лекарства на сегодня** (`menu:today`): показывает расписание на текущий день с иконками ✅/❌/⏳ по данным `get_today_intake_statuses()`
 - **Статистика** (`menu:stats`): кнопки «📈 За 7 дней» и «📆 План на 7 дней»; под каждым отчётом — кнопка «📄 Скачать PDF»
 - `log_intake` — upsert: при повторном нажатии обновляет запись за сегодня вместо дубля
@@ -255,6 +258,7 @@ ADMIN_ID=telegram_id_админа
 | 51 | `tests/`, `pytest.ini`, `requirements-dev.txt` | Не было тестов. Добавлены 58 unit-тестов на чистые функции (pytest) |
 | 52 | `handlers/meds.py` | Дубль входа в add-флоу (`add_start` ≈ `handle_add_med_callback`). Объединено в `_begin_add_flow()` |
 | 53 | `handlers/meds.py`, `tests/test_handlers.py` | Q1 (частично): success-сообщения сведены в `_med_saved_text()`, валидация диапазонов — в `_parse_int_range()` (8 save-хендлеров + 6 валидаций). Под защитой 24 характеризационных тестов |
+| 54 | `handlers/timezone.py`, `stats.py`, `settings.py`, `meds.py`, `bot.py`, `tests/test_menu.py` | Непоследовательные «Назад»: часть экранов меню без возврата. Сделана единая точка входа `/menu` + навигация edit-in-place с «◀️ В меню» (`menu:main`) на всех экранах |
 
 ### 🔲 К исправлению
 

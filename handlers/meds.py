@@ -410,9 +410,10 @@ async def show_meds_list(message, user):
     if not meds:
         await message.reply_text(
             "У тебя пока нет лекарств.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("➕ Добавить лекарство", callback_data="add_med")
-            ]])
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Добавить лекарство", callback_data="add_med")],
+                [InlineKeyboardButton("◀️ В меню", callback_data="menu:main")],
+            ])
         )
         return
 
@@ -463,9 +464,10 @@ async def show_meds_list(message, user):
 
     await message.reply_text(
         "➕ Хочешь добавить ещё?",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("➕ Добавить лекарство", callback_data="add_med")
-        ]])
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Добавить лекарство", callback_data="add_med")],
+            [InlineKeyboardButton("◀️ В меню", callback_data="menu:main")],
+        ])
     )
 
 
