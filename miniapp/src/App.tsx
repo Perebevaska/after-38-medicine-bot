@@ -1,5 +1,5 @@
 import { themeParams, viewport } from '@telegram-apps/sdk-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { inTelegram } from './main'
 import Dashboard from './pages/Dashboard'
 import MedicationList from './pages/MedicationList'
@@ -8,6 +8,41 @@ import StockPage from './pages/StockPage'
 import './App.css'
 
 type NavPage = 'dashboard' | 'medications' | 'stock'
+
+const WISHES = [
+  'Выздоравливай ❤️',
+  'Всё будет хорошо ✨',
+  'Ты справишься 💪',
+  'Береги себя 🌸',
+  'Мы с тобой 🤍',
+  'Ты молодец 🌟',
+  'Маленькие шаги — тоже победа 🌱',
+  'Будь здоров(а) 🍀',
+  'Ты не один(а) 💙',
+  'Всё под контролем 🌿',
+  'Верь в себя 🌈',
+  'Забота о себе — это важно 🕊️',
+  'Сегодня станет лучше 🌤️',
+  'Ты в безопасности 🫶',
+  'Каждый день — маленькая победа 🎯',
+]
+
+function SplashScreen({ onDone }: { onDone: () => void }) {
+  const [fading, setFading] = useState(false)
+  const wish = useMemo(() => WISHES[Math.floor(Math.random() * WISHES.length)], [])
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setFading(true), 1500)
+    const t2 = setTimeout(onDone, 2000)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [onDone])
+
+  return (
+    <div className={`splash${fading ? ' splash--out' : ''}`}>
+      <p className="splash-wish">{wish}</p>
+    </div>
+  )
+}
 
 function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPage) => void }) {
   return (
@@ -48,6 +83,7 @@ export default function App() {
   const [navPage, setNavPage] = useState<NavPage>('dashboard')
   const [editMedId, setEditMedId] = useState<number | undefined>()
   const [showForm, setShowForm] = useState(false)
+  const [showSplash, setShowSplash] = useState(true)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -103,6 +139,7 @@ export default function App() {
 
   return (
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
       <div className="tabs-outer">
         {NAV_PAGES.map((page, i) => (
           <div

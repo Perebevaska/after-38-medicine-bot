@@ -1,3 +1,39 @@
+/* ── Splash screen ───────────────────────────────────────────────────────── */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+
+.splash--out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-wish {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  padding: 0 36px;
+  line-height: 1.5;
+  animation: splash-in 0.5s ease;
+}
+
+@keyframes splash-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Tab panels ──────────────────────────────────────────────────────────── */
+
 .tabs-outer {
   position: relative;
   height: 100dvh;
