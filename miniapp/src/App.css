@@ -28,7 +28,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 10px 12px 12px;
+  margin: 10px 12px 0;
   padding: 12px 14px;
   background: var(--secondary-bg);
   border-radius: 12px;
@@ -197,8 +197,38 @@
 
 .nav-icon { font-size: 20px; }
 
+.nav-icon--date-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+}
+
+.nav-icon--date {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nav-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background: #f44336;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 6px;
+  min-width: 14px;
+  text-align: center;
+}
+
 .nav-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
 }
 
@@ -894,5 +924,232 @@
   font-size: 14px;
   color: #cc3333;
   padding: 0 16px;
+  text-align: center;
+}
+
+/* ── Stats page ──────────────────────────────────────────────────────────── */
+
+.stats-streak-block {
+  padding: 4px 16px 8px;
+}
+
+.streak-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.streak-row--dep {
+  opacity: 0.8;
+}
+
+.streak-fire { font-size: 22px; }
+
+.streak-count {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.streak-label {
+  font-size: 14px;
+  color: var(--hint);
+}
+
+.stats-adh-block {
+  padding: 4px 16px 8px;
+}
+
+.adh-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  margin-bottom: 8px;
+}
+
+.adh-total-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.adh-total-pct {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.adh-row {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.adh-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.adh-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.adh-dep {
+  font-size: 12px;
+  color: var(--hint);
+  font-weight: 400;
+}
+
+.adh-pct {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.adh-bar-bg {
+  height: 6px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.adh-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.adh-counts {
+  font-size: 11px;
+  color: var(--hint);
+}
+
+.pdf-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 16px 16px;
+}
+
+.btn-pdf {
+  padding: 12px 16px;
+  background: var(--secondary-bg);
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* ── Settings page ───────────────────────────────────────────────────────── */
+
+.settings-block {
+  margin: 0 12px 4px;
+  background: var(--secondary-bg);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.settings-time-input {
+  background: none;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--link);
+  text-align: right;
+  width: 80px;
+  outline: none;
+  cursor: pointer;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 4px;
+}
+
+.toggle-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 8px;
+  background: none;
+  font-size: 13px;
+  color: var(--hint);
+  cursor: pointer;
+}
+
+.toggle-btn--active {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-color: var(--button-bg);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.15);
+  border-radius: 13px;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  top: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--button-bg);
+}
+
+.toggle-switch input:checked + .toggle-track::after {
+  transform: translateX(18px);
+}
+
+.settings-footer {
+  padding: 12px 16px 20px;
   text-align: center;
 }

@@ -95,3 +95,15 @@ export interface Dependent {
   id: number
   name: string
 }
+
+export interface UserSettings {
+  timezone: string
+  reminder_mode: 'once' | 'repeat'
+  time_morning: string
+  time_lunch: string
+  time_evening: string
+  time_night: string
+  daily_plan_enabled: number
+  daily_plan_time: string | null
+  caregiver_enabled: number
+}

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, getInitDataRaw } from './client'
-import type { TodayItem, IntakeIn, AdherenceResponse, StreakItem, Medication, MedicationIn, Dependent, StockInfo } from './types'
+import type { TodayItem, IntakeIn, AdherenceResponse, StreakItem, Medication, MedicationIn, Dependent, StockInfo, UserSettings } from './types'
 
 export function useToday() {
   return useQuery<TodayItem[]>({
@@ -145,6 +145,46 @@ export function useDisableStock() {
       qc.invalidateQueries({ queryKey: ['stock', medId] })
       qc.invalidateQueries({ queryKey: ['medications'] })
     },
+  })
+}
+
+export function useSettings() {
+  return useQuery<UserSettings>({
+    queryKey: ['settings'],
+    queryFn: () => api.get<UserSettings>('/settings'),
+    enabled: !!getInitDataRaw(),
+  })
+}
+
+export function useSetReminderMode() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, 'once' | 'repeat'>({
+    mutationFn: (mode) => api.put<void>('/settings/reminder-mode', { mode }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+export function useSetPreset() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, { slot: string; time: string }>({
+    mutationFn: ({ slot, time }) => api.put<void>(`/settings/presets/${slot}`, { time }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+export function useSetDailyPlan() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, { enabled: boolean; time?: string }>({
+    mutationFn: (body) => api.put<void>('/settings/daily-plan', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+export function useSetCaregiver() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, boolean>({
+    mutationFn: (enabled) => api.put<void>('/settings/caregiver', { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   })
 }
 

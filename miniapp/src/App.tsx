@@ -1,13 +1,28 @@
 import { themeParams, viewport } from '@telegram-apps/sdk-react'
 import { useEffect, useRef, useState } from 'react'
 import { inTelegram } from './main'
+import { useToday } from './api/hooks'
 import Dashboard from './pages/Dashboard'
 import MedicationList from './pages/MedicationList'
 import MedicationForm from './pages/MedicationForm'
 import StockPage from './pages/StockPage'
+import StatsPage from './pages/StatsPage'
+import SettingsPage from './pages/SettingsPage'
 import './App.css'
 
-type NavPage = 'dashboard' | 'medications' | 'stock'
+type NavPage = 'dashboard' | 'medications' | 'stock' | 'stats' | 'settings'
+
+function TodayIcon() {
+  const day = new Date().getDate().toString().padStart(2, '0')
+  const { data } = useToday()
+  const pending = data?.filter((i) => i.status === 'pending').length ?? 0
+  return (
+    <span className="nav-icon nav-icon--date-wrap">
+      <span className="nav-icon--date">{day}</span>
+      {pending > 0 && <span className="nav-badge">{pending > 9 ? '9+' : pending}</span>}
+    </span>
+  )
+}
 
 function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPage) => void }) {
   return (
@@ -17,7 +32,7 @@ function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPag
         className={`nav-item${active === 'dashboard' ? ' nav-item--active' : ''}`}
         onClick={() => onChange('dashboard')}
       >
-        <span className="nav-icon">📅</span>
+        <TodayIcon />
         <span className="nav-label">Сегодня</span>
       </button>
       <button
@@ -36,11 +51,27 @@ function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPag
         <span className="nav-icon">📦</span>
         <span className="nav-label">Запас</span>
       </button>
+      <button
+        type="button"
+        className={`nav-item${active === 'stats' ? ' nav-item--active' : ''}`}
+        onClick={() => onChange('stats')}
+      >
+        <span className="nav-icon">📊</span>
+        <span className="nav-label">Статистика</span>
+      </button>
+      <button
+        type="button"
+        className={`nav-item${active === 'settings' ? ' nav-item--active' : ''}`}
+        onClick={() => onChange('settings')}
+      >
+        <span className="nav-icon">⚙️</span>
+        <span className="nav-label">Настройки</span>
+      </button>
     </nav>
   )
 }
 
-const NAV_PAGES: NavPage[] = ['dashboard', 'medications', 'stock']
+const NAV_PAGES: NavPage[] = ['dashboard', 'medications', 'stock', 'stats', 'settings']
 const SWIPE_MIN_X = 65
 const SWIPE_RATIO = 1.5
 
@@ -115,6 +146,8 @@ export default function App() {
               <MedicationList onAdd={() => openForm()} onEdit={(id) => openForm(id)} />
             )}
             {page === 'stock' && <StockPage />}
+            {page === 'stats' && <StatsPage />}
+            {page === 'settings' && <SettingsPage />}
           </div>
         ))}
       </div>

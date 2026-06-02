@@ -80,6 +80,8 @@ export default function Dashboard() {
 
   return (
     <div className="page">
+      <WishCard />
+
       <h2 className="section-title">Сегодня</h2>
 
       {isLoading && <p className="hint">Загрузка…</p>}
@@ -106,8 +108,6 @@ export default function Dashboard() {
           ))}
         </div>
       )}
-
-      <WishCard />
     </div>
   )
 }
