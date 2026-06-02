@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useToday, useAdherence, useStreak, useLogIntake } from '../api/hooks'
+import { useToday, useLogIntake } from '../api/hooks'
 import type { TodayItem } from '../api/types'
 import { randomWish } from '../wishes'
 
@@ -31,31 +31,6 @@ function WishCard() {
       >
         🔄
       </button>
-    </div>
-  )
-}
-
-function StatsBar() {
-  const { data: streakData } = useStreak()
-  const { data: adherence } = useAdherence()
-
-  const ownerStreak = streakData?.find((s) => s.dependent_id === null)?.streak ?? 0
-  const pct = adherence?.total_pct
-
-  return (
-    <div className="stats-bar">
-      <span className="stat">
-        <span className="stat-icon">🔥</span>
-        <span className="stat-value">{ownerStreak}</span>
-        <span className="stat-label">дней серия</span>
-      </span>
-      {pct !== null && pct !== undefined && (
-        <span className="stat">
-          <span className="stat-icon">📊</span>
-          <span className="stat-value">{pct}%</span>
-          <span className="stat-label">соблюдение</span>
-        </span>
-      )}
     </div>
   )
 }
@@ -105,10 +80,6 @@ export default function Dashboard() {
 
   return (
     <div className="page">
-      <StatsBar />
-
-      <WishCard />
-
       <h2 className="section-title">Сегодня</h2>
 
       {isLoading && <p className="hint">Загрузка…</p>}
@@ -135,6 +106,8 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      <WishCard />
     </div>
   )
 }
