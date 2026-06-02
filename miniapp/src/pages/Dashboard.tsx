@@ -252,6 +252,13 @@ export default function Dashboard() {
   // enteringIds: ключи элементов, только что появившихся в секции others
   const [enteringIds, setEnteringIds] = useState<Set<string>>(new Set())
   const prevDataRef = useRef<TodayItem[]>([])
+  // per-item таймеры анимации: отменяем при быстром undo
+  const animTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>[]>>(new Map())
+
+  const clearAnimForKey = (k: string) => {
+    animTimersRef.current.get(k)?.forEach(clearTimeout)
+    animTimersRef.current.delete(k)
+  }
 
   useEffect(() => {
     if (!data) return
@@ -259,35 +266,61 @@ export default function Dashboard() {
     const prevDueKeys = new Set(prevData.filter(isDuePending).map(itemKey))
     const currentDueKeys = new Set(data.filter(isDuePending).map(itemKey))
 
+    // Undo: элемент вернулся в due-pending — отменяем его анимацию выхода
+    setExitingMap((prev) => {
+      const toCancel = [...prev.keys()].filter((k) => currentDueKeys.has(k))
+      if (!toCancel.length) return prev
+      toCancel.forEach(clearAnimForKey)
+      const next = new Map(prev)
+      toCancel.forEach((k) => next.delete(k))
+      return next
+    })
+    setEnteringIds((prev) => {
+      const toCancel = [...prev].filter((k) => currentDueKeys.has(k))
+      if (!toCancel.length) return prev
+      const next = new Set(prev)
+      toCancel.forEach((k) => next.delete(k))
+      return next
+    })
+
     // Элементы, которые только что покинули due-pending группу
     const justLeft = prevData.filter(
       (i) => prevDueKeys.has(itemKey(i)) && !currentDueKeys.has(itemKey(i))
     )
 
     if (justLeft.length > 0) {
-      // Кладём снапшоты (со статусом pending и green-подсветкой)
       setExitingMap((prev) => {
         const next = new Map(prev)
         justLeft.forEach((i) => next.set(itemKey(i), i))
         return next
       })
-      const leftKeys = justLeft.map(itemKey)
-      // После exit-анимации (250ms) убираем из due-секции и добавляем enter в others
-      setTimeout(() => {
-        setExitingMap((prev) => {
-          const next = new Map(prev)
-          leftKeys.forEach((k) => next.delete(k))
-          return next
-        })
-        setEnteringIds((prev) => new Set([...prev, ...leftKeys]))
-        setTimeout(() => {
-          setEnteringIds((prev) => {
-            const next = new Set(prev)
-            leftKeys.forEach((k) => next.delete(k))
+
+      justLeft.forEach((item) => {
+        const k = itemKey(item)
+        clearAnimForKey(k)
+
+        const t1 = setTimeout(() => {
+          setExitingMap((prev) => {
+            const next = new Map(prev)
+            next.delete(k)
             return next
           })
-        }, 320)
-      }, 260)
+          setEnteringIds((prev) => new Set([...prev, k]))
+
+          const t2 = setTimeout(() => {
+            setEnteringIds((prev) => {
+              const next = new Set(prev)
+              next.delete(k)
+              return next
+            })
+            animTimersRef.current.delete(k)
+          }, 320)
+
+          animTimersRef.current.set(k, [t2])
+        }, 260)
+
+        animTimersRef.current.set(k, [t1])
+      })
     }
 
     prevDataRef.current = data
@@ -295,11 +328,11 @@ export default function Dashboard() {
 
   const allItems = data ?? []
 
-  // Due-секция: реально due-pending + снапшоты exiting, сортировка по времени desc
-  const dueItems = [
-    ...allItems.filter(isDuePending),
-    ...[...exitingMap.values()],
-  ].sort((a, b) => b.reminder_time.localeCompare(a.reminder_time))
+  // Due-секция: дедупликация через Map (реальный элемент приоритетнее снапшота)
+  const dueItemsMap = new Map<string, TodayItem>()
+  allItems.filter(isDuePending).forEach((i) => dueItemsMap.set(itemKey(i), i))
+  exitingMap.forEach((item, key) => { if (!dueItemsMap.has(key)) dueItemsMap.set(key, item) })
+  const dueItems = [...dueItemsMap.values()].sort((a, b) => b.reminder_time.localeCompare(a.reminder_time))
 
   // Others-секция: не-due + не-exiting
   const otherItems = allItems.filter(
