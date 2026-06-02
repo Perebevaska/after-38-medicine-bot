@@ -1,5 +1,6 @@
 import { themeParams, viewport } from '@telegram-apps/sdk-react'
 import { useEffect, useRef, useState } from 'react'
+import { CalendarHeart, Pill, BriefcaseMedical, ChartNoAxesColumnIncreasing, Settings } from 'lucide-react'
 import { inTelegram } from './main'
 import { useToday } from './api/hooks'
 import Dashboard from './pages/Dashboard'
@@ -19,13 +20,11 @@ function isDue(reminderTime: string): boolean {
 }
 
 function TodayIcon() {
-  const day = new Date().getDate()
   const { data } = useToday()
   const pending = data?.filter((i) => i.status === 'pending' && isDue(i.reminder_time)).length ?? 0
   return (
-    <span className="cal-icon">
-      <span className="cal-header" />
-      <span className="cal-day">{day}</span>
+    <span className="nav-icon-wrap">
+      <CalendarHeart size={22} strokeWidth={1.75} />
       {pending > 0 && <span className="nav-badge">{pending > 9 ? '9+' : pending}</span>}
     </span>
   )
@@ -47,7 +46,7 @@ function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPag
         className={`nav-item${active === 'medications' ? ' nav-item--active' : ''}`}
         onClick={() => onChange('medications')}
       >
-        <span className="nav-icon">💊</span>
+        <Pill size={22} strokeWidth={1.75} />
         <span className="nav-label">Лекарства</span>
       </button>
       <button
@@ -55,7 +54,7 @@ function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPag
         className={`nav-item${active === 'stock' ? ' nav-item--active' : ''}`}
         onClick={() => onChange('stock')}
       >
-        <span className="nav-icon">📦</span>
+        <BriefcaseMedical size={22} strokeWidth={1.75} />
         <span className="nav-label">Запас</span>
       </button>
       <button
@@ -63,7 +62,7 @@ function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPag
         className={`nav-item${active === 'stats' ? ' nav-item--active' : ''}`}
         onClick={() => onChange('stats')}
       >
-        <span className="nav-icon">📊</span>
+        <ChartNoAxesColumnIncreasing size={22} strokeWidth={1.75} />
         <span className="nav-label">Статистика</span>
       </button>
       <button
@@ -71,7 +70,7 @@ function BottomNav({ active, onChange }: { active: NavPage; onChange: (p: NavPag
         className={`nav-item${active === 'settings' ? ' nav-item--active' : ''}`}
         onClick={() => onChange('settings')}
       >
-        <span className="nav-icon">⚙️</span>
+        <Settings size={22} strokeWidth={1.75} />
         <span className="nav-label">Настройки</span>
       </button>
     </nav>

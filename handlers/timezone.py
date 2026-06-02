@@ -60,7 +60,7 @@ def _main_menu_text(first_name: str, hint: str = "") -> str:
 
 async def show_main_menu(update, first_name, hint: str = ""):
     """Отправляет приветственное сообщение с главным меню. hint — опциональная подсказка."""
-    await update.message.reply_text(_main_menu_text(first_name, hint), reply_markup=_main_menu_keyboard())
+    await update.message.reply_text(_main_menu_text(first_name, hint), parse_mode="HTML", reply_markup=_main_menu_keyboard())
 
 
 def _owner_streak_hint(telegram_id: int, user_id: int) -> str:

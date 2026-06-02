@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { createPortal } from 'react-dom'
+import { Check, X } from 'lucide-react'
 import { useToday, useLogIntake } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
@@ -25,44 +26,33 @@ interface HeartParticle {
 }
 
 // ── Health bar persistence ─────────────────────────────────────────────────
-const HP_KEY = 'wish_hp'
-const HP_TS_KEY = 'wish_hp_ts'
-// Шкала 0–200: 0–100 = рамка, 100–200 = текст; полный разряд за 11 с
-const DEPLETE_PER_MS = 200 / (11 * 1000)
-
-function loadHp(): number {
-  try {
-    const h = parseFloat(localStorage.getItem(HP_KEY) ?? '0')
-    const ts = parseInt(localStorage.getItem(HP_TS_KEY) ?? '0', 10)
-    if (!ts) return Math.max(0, h)
-    return Math.max(0, h - (Date.now() - ts) * DEPLETE_PER_MS)
-  } catch {
-    return 0
-  }
-}
-
-function saveHp(h: number): void {
-  localStorage.setItem(HP_KEY, String(h))
-  localStorage.setItem(HP_TS_KEY, String(Date.now()))
-}
+// health bar — оставлено для будущего
+// const HP_KEY = 'wish_hp'
+// const HP_TS_KEY = 'wish_hp_ts'
+// const DEPLETE_PER_MS = 200 / (11 * 1000) // Шкала 0–200: 0–100 = рамка, 100–200 = текст; полный разряд за 11 с
+// const loadHp = (): number => { try { const h = parseFloat(localStorage.getItem(HP_KEY) ?? '0'); const ts = parseInt(localStorage.getItem(HP_TS_KEY) ?? '0', 10); if (!ts) return Math.max(0, h); return Math.max(0, h - (Date.now() - ts) * DEPLETE_PER_MS) } catch { return 0 } }
+// const saveHp = (h: number): void => { localStorage.setItem(HP_KEY, String(h)); localStorage.setItem(HP_TS_KEY, String(Date.now())) }
 // ──────────────────────────────────────────────────────────────────────────
 
 let _pid = 0
 
-function WishCard() {
+export type WishCardHandle = { celebrate: () => void }
+
+const WishCard = forwardRef<WishCardHandle>(function WishCard(_, ref) {
   const [wish, setWish] = useState(randomWish)
-  const [hp, setHp] = useState(loadHp)
+  // hp и setHp отключены (заливка/рамка), оставлены для будущего
+  // const [hp, setHp] = useState(loadHp)
   const [particles, setParticles] = useState<HeartParticle[]>([])
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const heartRef = useRef<HTMLSpanElement>(null)
 
   // Обновляем hp каждые 200 мс — нужно для быстрого drain (11 с)
-  useEffect(() => {
-    const id = setInterval(() => setHp(loadHp), 200)
-    return () => clearInterval(id)
-  }, [])
+  // useEffect(() => {
+  //   const id = setInterval(() => setHp(loadHp), 200)
+  //   return () => clearInterval(id)
+  // }, [])
 
   const spawnHearts = () => {
-    const rect = btnRef.current?.getBoundingClientRect()
+    const rect = heartRef.current?.getBoundingClientRect()
     if (!rect) return
     const cx = rect.left + rect.width / 2
     const cy = rect.top + rect.height / 2
@@ -86,29 +76,31 @@ function WishCard() {
     setTimeout(() => setParticles((p) => p.filter((pt) => !ids.has(pt.id))), maxDur)
   }
 
-  const next = () => {
+  const celebrate = () => {
     setWish((w) => randomWish(w))
     spawnHearts()
-    setHp(() => {
-      const current = loadHp()
-      const bonus = 5 + Math.random() * 10 // 5–15
-      const next = Math.min(200, current + bonus)
-      saveHp(next)
-      return next
-    })
   }
 
+  useImperativeHandle(ref, () => ({ celebrate }))
+
+  // next (смена пожелания + hp через кнопку) — отключено; оставлено для будущего
+  // const next = () => {
+  //   celebrate()
+  //   setHp(() => { ... })
+  // }
+
   // Фаза 1 (0–100): рамка. Фаза 2 (100–200): текст
-  const borderPct = Math.min(hp, 100)
-  const textPct   = Math.max(0, hp - 100)
+  // const borderPct = Math.min(hp, 100)   // отключено, оставлено для будущего
+  // const textPct   = Math.max(0, hp - 100) // отключено, оставлено для будущего
 
   return (
     <>
       <div className="wish-card">
-        <span className="wish-border-top"    style={{ width: `${borderPct}%` }} />
-        <span className="wish-border-bottom" style={{ width: `${borderPct}%` }} />
+        {/* <span className="wish-border-top"    style={{ width: `${borderPct}%` }} /> */}
+        {/* <span className="wish-border-bottom" style={{ width: `${borderPct}%` }} /> */}
         <div className="wish-text-wrap">
           <span className="wish-text">{wish}</span>
+          {/* wish-text-hp (заливка текста) — отключено, оставлено для будущего
           <span
             className="wish-text wish-text-hp"
             aria-hidden="true"
@@ -116,15 +108,9 @@ function WishCard() {
           >
             {wish}
           </span>
+          */}
         </div>
-        <button
-          ref={btnRef}
-          className="wish-refresh"
-          onClick={next}
-          aria-label="Другое пожелание"
-        >
-          ❤️
-        </button>
+        <span ref={heartRef} className="wish-heart" aria-hidden="true">❤️</span>
       </div>
       {createPortal(
         <div className="hearts-overlay" aria-hidden="true">
@@ -149,7 +135,7 @@ function WishCard() {
       )}
     </>
   )
-}
+})
 
 function isDue(reminderTime: string): boolean {
   const now = new Date()
@@ -164,14 +150,17 @@ function MedCard({
   item,
   exiting,
   entering,
+  onTaken,
 }: {
   item: TodayItem
   exiting?: boolean
   entering?: boolean
+  onTaken?: () => void
 }) {
   const { mutate, isPending } = useLogIntake()
 
   const log = (status: 'taken' | 'skipped' | 'pending') => {
+    if (status === 'taken') onTaken?.()
     mutate({
       medication_id: item.medication_id,
       scheduled_time: item.reminder_time,
@@ -201,8 +190,8 @@ function MedCard({
 
       {item.status === 'pending' ? (
         <div className="med-actions">
-          <button className="btn-take" onClick={() => log('taken')} disabled={isPending}>✅</button>
-          <button className="btn-skip" onClick={() => log('skipped')} disabled={isPending}>❌</button>
+          <button className="btn-take" onClick={() => log('taken')} disabled={isPending}><Check size={18} strokeWidth={2.5} /></button>
+          <button className="btn-skip" onClick={() => log('skipped')} disabled={isPending}><X size={18} strokeWidth={2.5} /></button>
         </div>
       ) : (
         <div className="med-actions">
@@ -212,7 +201,7 @@ function MedCard({
             disabled={isPending}
             title="Отменить отметку"
           >
-            {item.status === 'taken' ? '✅' : '❌'}
+            {item.status === 'taken' ? <Check size={18} strokeWidth={2.5} /> : <X size={18} strokeWidth={2.5} />}
           </button>
         </div>
       )}
@@ -224,6 +213,7 @@ export default function Dashboard() {
   const { data, isLoading, error } = useToday()
   const qc = useQueryClient()
   const [takingAll, setTakingAll] = useState(false)
+  const wishRef = useRef<WishCardHandle>(null)
 
   // exitingMap: снапшоты due-pending элементов, пока играет exit-анимация
   const [exitingMap, setExitingMap] = useState<Map<string, TodayItem>>(new Map())
@@ -317,7 +307,7 @@ export default function Dashboard() {
 
   return (
     <div className="page">
-      <WishCard />
+      <WishCard ref={wishRef} />
 
       <h2 className="section-title">Сегодня</h2>
 
@@ -342,6 +332,7 @@ export default function Dashboard() {
               key={itemKey(item)}
               item={item}
               exiting={exitingMap.has(itemKey(item))}
+              onTaken={() => wishRef.current?.celebrate()}
             />
           ))}
 
@@ -362,6 +353,7 @@ export default function Dashboard() {
               key={itemKey(item)}
               item={item}
               entering={enteringIds.has(itemKey(item))}
+              onTaken={() => wishRef.current?.celebrate()}
             />
           ))}
         </div>
