@@ -2,12 +2,13 @@
 import os
 import pytest
 
-TEST_DSN = "postgresql://medbot:medbot@127.0.0.1/medbot_test"
+TEST_DSN = os.environ.get("TEST_DATABASE_URL", "postgresql://medbot:medbot@127.0.0.1/medbot_test")
 TEST_TELEGRAM_ID = 77001
 
 # Устанавливаем env vars до любых импортов database/api
 os.environ.setdefault("DATABASE_URL", TEST_DSN)
 os.environ.setdefault("BOT_TOKEN", "test-bot-token-1234567890")
+os.environ.setdefault("MINIAPP_ORIGIN", "*")
 
 
 @pytest.fixture(scope="session", autouse=True)
