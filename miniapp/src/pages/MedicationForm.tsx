@@ -99,7 +99,6 @@ const nowHHMM = () => {
   const d = new Date()
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
-const DEFAULT_TIMES = ['09:00', '13:00', '18:00', '21:00', '07:00', '23:00']
 
 const MEAL_OPTIONS: { value: MealRelation; label: string }[] = [
   { value: 'before', label: 'До еды' },
@@ -140,9 +139,9 @@ interface FormState {
 
 // ─── converters ──────────────────────────────────────────────────────────────
 
-function defaultRule(index: number): RuleState {
+function defaultRule(_index: number): RuleState {
   return {
-    reminder_time: index === 0 ? nowHHMM() : (DEFAULT_TIMES[index] ?? '12:00'),
+    reminder_time: nowHHMM(),
     frequency: 'daily',
     interval_days: 2,
     weekdays: [1, 2, 3, 4, 5],
