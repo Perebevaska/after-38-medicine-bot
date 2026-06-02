@@ -203,6 +203,18 @@ TRUST_PROXY=false                                 # true → брать IP из 
 
 🔲 **O6** — `pip-audit` + пины транзитивных зависимостей (привязан к D3 в roadmap).
 
+### Mini App — баги (аудит 2026-06-02, закрыты 2026-06-02)
+
+✅ **MA1** `init()` не вызывает `restoreInitData()` — сигнал `initDataRaw` вечно `undefined`. Фикс: синхронный `restoreInitData()` + `retrieveRawInitData()` + `setInitData()` до `createRoot()` в `main.tsx`.
+
+✅ **MA2** `ErrorBoundary` не был подключён. Фикс: обёрнут `<App />` в `main.tsx`.
+
+✅ **MA3** Запросы к API стартовали без `Authorization`. Фикс: `enabled: !!getInitDataRaw()` в каждом `useQuery`.
+
+✅ **MA4** `min-height: 100vh` ломал layout в Telegram WebApp. Фикс: `100dvh`.
+
+✅ **MA5** FastAPI 0.136 добавил проверку `scheme == "bearer"` в `HTTPBearer` — схема `tma` отклонялась до вызова нашего кода авторизации. Фикс: заменить `HTTPBearer` на `HTTPBase` в `api/auth.py`. **Важно:** при обновлении FastAPI проверять поведение `HTTPBearer`.
+
 ---
 
 ## Roadmap

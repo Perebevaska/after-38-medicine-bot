@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from './client'
+import { api, getInitDataRaw } from './client'
 import type { TodayItem, IntakeIn, AdherenceResponse, StreakItem } from './types'
 
 export function useToday() {
   return useQuery<TodayItem[]>({
     queryKey: ['today'],
     queryFn: () => api.get<TodayItem[]>('/today'),
+    enabled: !!getInitDataRaw(),
   })
 }
 
@@ -13,6 +14,7 @@ export function useAdherence() {
   return useQuery<AdherenceResponse>({
     queryKey: ['adherence'],
     queryFn: () => api.get<AdherenceResponse>('/stats/adherence'),
+    enabled: !!getInitDataRaw(),
   })
 }
 
@@ -20,6 +22,7 @@ export function useStreak() {
   return useQuery<StreakItem[]>({
     queryKey: ['streak'],
     queryFn: () => api.get<StreakItem[]>('/stats/streak'),
+    enabled: !!getInitDataRaw(),
   })
 }
 

@@ -13,7 +13,8 @@ from urllib.parse import parse_qsl
 
 import database as db
 from fastapi import Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security.http import HTTPBase
 
 MAX_AGE = 86_400  # 24 часа
 
@@ -59,7 +60,7 @@ class TelegramUser:
     user_id: int
 
 
-_bearer = HTTPBearer(scheme_name="Telegram Mini App")
+_bearer = HTTPBase(scheme="bearer", scheme_name="Telegram Mini App")
 
 
 async def require_telegram_user(
