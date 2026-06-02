@@ -50,3 +50,13 @@ export const api = {
 }
 
 export { ApiError }
+
+/** MF9: единое сообщение об ошибке API для всех страниц. */
+export function apiErrorMessage(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error ?? '')
+  if (msg.includes('401') || msg.includes('tma') || msg.includes('hash') || msg.includes('initData')) {
+    return 'Откройте приложение через Telegram'
+  }
+  if (msg.includes('429')) return 'Слишком много запросов — попробуйте чуть позже'
+  return msg || 'Что-то пошло не так'
+}

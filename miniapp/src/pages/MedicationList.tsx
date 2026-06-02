@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Pencil, Pause, Play, Package, Trash2, Plus } from 'lucide-react'
 import { useMedications, useDeleteMedication, usePauseMedication } from '../api/hooks'
+import { apiErrorMessage } from '../api/client'
 import type { Medication } from '../api/types'
 import { StockExpanded } from './StockPage'
 
@@ -160,7 +161,7 @@ export default function MedicationList({ onAdd, onEdit }: Props) {
       </div>
 
       {isLoading && <p className="hint">Загрузка…</p>}
-      {error && <p className="hint error">{error.message}</p>}
+      {error && <p className="hint error">{apiErrorMessage(error)}</p>}
 
       {data && data.length === 0 && (
         <div className="mlist-empty">

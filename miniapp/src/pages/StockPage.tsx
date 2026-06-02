@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
 import {
-  useMedications,
   useStock,
   useSetStock,
   useAddStock,
@@ -44,7 +43,7 @@ export function StockExpanded({ med }: { med: Medication }) {
       setStockQty(String(data.stock_qty))
     }
     setUnitsVal(String(data.units_per_dose ?? 1))
-    setThreshVal(String(data.low_stock_days ?? 7))
+    setThreshVal(String(data.low_stock_days ?? 5))
   }, [data])
 
   if (isLoading) return <p className="stock-loading">Загрузка…</p>
@@ -179,47 +178,3 @@ export function StockExpanded({ med }: { med: Medication }) {
   )
 }
 
-function StockCard({ med }: { med: Medication }) {
-  const [open, setOpen] = useState(false)
-  const hasStock = med.stock_qty !== null && med.stock_qty !== undefined
-
-  return (
-    <div className="stock-card">
-      <button className="stock-card-header" onClick={() => setOpen((v) => !v)}>
-        <div className="stock-card-info">
-          <span className="stock-card-name">{med.name}</span>
-          <span className={`stock-card-qty${hasStock ? '' : ' stock-card-qty--none'}`}>
-            {hasStock ? `${med.stock_qty} ед.` : 'не отслеживается'}
-          </span>
-        </div>
-        <span className="stock-chevron">{open ? '▲' : '▼'}</span>
-      </button>
-      {open && <StockExpanded med={med} />}
-    </div>
-  )
-}
-
-export default function StockPage() {
-  const { data, isLoading, error } = useMedications()
-
-  return (
-    <div className="page">
-      <div className="mlist-header">
-        <h2 className="mlist-title">Запас</h2>
-      </div>
-
-      {isLoading && <p className="hint">Загрузка…</p>}
-      {error && <p className="hint error">{error.message}</p>}
-
-      {data && data.length === 0 && <p className="hint">Нет лекарств</p>}
-
-      {data && data.length > 0 && (
-        <div className="stock-list">
-          {data.map((med) => (
-            <StockCard key={med.id} med={med} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}

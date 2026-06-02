@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Check, X } from 'lucide-react'
 import { useToday, useLogIntake } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
+import { api, apiErrorMessage } from '../api/client'
 import type { TodayItem } from '../api/types'
 import { randomWish } from '../wishes'
 
@@ -245,13 +245,7 @@ export default function Dashboard() {
 
       {isLoading && <p className="hint">Загрузка…</p>}
 
-      {error && (
-        <p className="hint error">
-          {error.message.includes('401')
-            ? 'Откройте приложение через Telegram'
-            : error.message}
-        </p>
-      )}
+      {error && <p className="hint error">{apiErrorMessage(error)}</p>}
 
       {data && data.length === 0 && (
         <p className="hint">На сегодня нет приёмов</p>

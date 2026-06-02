@@ -6,8 +6,9 @@ WORKDIR /app
 RUN python -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# DV3: образ из запиненных версий — детерминизм с прод/CI.
+COPY requirements-lock.txt .
+RUN pip install --no-cache-dir -r requirements-lock.txt
 
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────

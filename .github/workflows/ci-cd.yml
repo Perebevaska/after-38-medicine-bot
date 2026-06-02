@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# DV5: не допускать гонок деплоя при нескольких пушах в main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ── Тесты ──────────────────────────────────────────────────────────────────
   test:
@@ -40,12 +45,33 @@ jobs:
           python-version: '3.14'
           allow-prereleases: true
           cache: pip
-      - run: pip install -r requirements.txt
+      # DV3: тестируем на тех же пинах, что и прод (requirements-lock.txt).
+      - run: pip install -r requirements-lock.txt
       - run: python -m pytest -q
+
+  # ── Фронт: type-check + сборка (MF1 — гейт на PR, а не только при деплое) ───
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: miniapp
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: miniapp/package-lock.json
+      - run: npm ci
+      # Жёсткий гейт: tsc -b + vite build (ловит то, что иначе валит прод-деплой).
+      - run: npm run build
+      # Lint — информационно (есть унаследованный долг set-state-in-effect).
+      - run: npm run lint
+        continue-on-error: true
 
   # ── Сборка образа → ghcr.io (только main) ──────────────────────────────────
   build:
-    needs: test
+    needs: [test, frontend]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -83,8 +109,24 @@ jobs:
           script: |
             set -e
             cd /root/after-30-medicine-bot
+            # DV4: атомарный деплой с откатом по /health.
+            PREV=$(git rev-parse HEAD)
             git pull origin main
             source venv/bin/activate
             pip install -r requirements-lock.txt -q
-            cd miniapp && npm run build && cd ..
+            cd miniapp && npm ci && npm run build && cd ..
             systemctl restart medbot-bot medbot-api medbot-worker
+            # Ждём, пока поднимется API; до 5 попыток.
+            ok=0
+            for i in 1 2 3 4 5; do
+              sleep 3
+              if curl -fsS http://localhost:8000/health > /dev/null; then ok=1; break; fi
+            done
+            if [ "$ok" != "1" ]; then
+              echo "Health check провален — откат на $PREV"
+              git reset --hard "$PREV"
+              pip install -r requirements-lock.txt -q
+              cd miniapp && npm ci && npm run build && cd ..
+              systemctl restart medbot-bot medbot-api medbot-worker
+              exit 1
+            fi

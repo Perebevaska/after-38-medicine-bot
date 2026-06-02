@@ -9,3 +9,8 @@ setup_pg.sh
 migrate_sqlite_to_pg.py
 tests/
 .containerignore
+# DV2: образ бота не обслуживает Mini App — не тащим фронт (node_modules/dist).
+miniapp/
+CLAUDE.md
+CLAUDE.original.md
+*.md

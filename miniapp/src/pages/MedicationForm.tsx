@@ -93,7 +93,12 @@ function TimePicker({ value, onChange }: TimePickerProps) {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-const todayStr = () => new Date().toISOString().slice(0, 10)
+// MF4: локальная дата, не UTC — иначе anchor_date для interval-правил смещается
+// на дальних поясах (toISOString даёт UTC-день).
+const todayStr = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const nowHHMM = () => {
   const d = new Date()
