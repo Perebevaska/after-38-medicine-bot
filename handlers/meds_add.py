@@ -12,7 +12,7 @@ from constants import (NAME, DOSAGE, MEAL, TIMES, DOSAGE_B, TIMES_B,
                        SELECT_DEPENDENT, ADD_DEPENDENT_NAME,
                        MEAL_LABELS, MAX_MEDICATIONS_PER_USER, MAX_DEPENDENTS,
                        DEPENDENT_NAME_MAX_LEN, SLOT_ORDER)
-from utils import handle_db_errors, escape_md, NAME_MAX_LEN, DOSAGE_MAX_LEN
+from utils import handle_db_errors, escape_html, NAME_MAX_LEN, DOSAGE_MAX_LEN
 from handlers.meds_common import (
     _CANCEL_BTN, _ADD_DOSAGE_KB, _ADD_FREQ_INTERVAL_KB, _ADD_FREQ_MONTHDAY_KB,
     _back_cancel_kb, _freq_type_keyboard, _freq_type_b_keyboard,
@@ -108,8 +108,8 @@ async def handle_new_dependent_name_in_flow(update: Update, context: ContextType
         return ConversationHandler.END
 
     await update.message.reply_text(
-        f"✅ Подопечный *{escape_md(name)}* добавлен.\n\nКак называется лекарство?",
-        parse_mode="Markdown",
+        f"✅ Подопечный <b>{escape_html(name)}</b> добавлен.\n\nКак называется лекарство?",
+        parse_mode="HTML",
         reply_markup=_CANCEL_BTN
     )
     return NAME
@@ -166,8 +166,8 @@ async def enter_multi_dosage_mode(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     context.user_data["multi_dosage"] = True
     await query.edit_message_text(
-        "Введи *дозировку А* (например: 25 мкг):",
-        parse_mode="Markdown",
+        "Введи <b>дозировку А</b> (например: 25 мкг):",
+        parse_mode="HTML",
         reply_markup=_back_cancel_kb("back_add_to_name")
     )
     return DOSAGE
@@ -182,8 +182,8 @@ async def add_dosage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("multi_dosage"):
         dosage_a = context.user_data["dosage"]
         await update.message.reply_text(
-            f"Введи *дозировку Б* (например: 50 мкг):\n_Дозировка А: {escape_md(dosage_a)}_",
-            parse_mode="Markdown",
+            f"Введи <b>дозировку Б</b> (например: 50 мкг):\n<i>Дозировка А: {escape_html(dosage_a)}</i>",
+            parse_mode="HTML",
             reply_markup=_back_cancel_kb("back_multi_to_dosage_a")
         )
         return DOSAGE_B
@@ -191,8 +191,8 @@ async def add_dosage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected = context.user_data["selected_slots"]
     presets = get_user_time_presets(update.effective_user.id)
     await update.message.reply_text(
-        "⏰ *Когда принимать?* — выбери один или несколько:\n\n_Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов._",
-        parse_mode="Markdown",
+        "⏰ <b>Когда принимать?</b> — выбери один или несколько:\n\n<i>Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов.</i>",
+        parse_mode="HTML",
         reply_markup=_timeslots_keyboard(selected, presets)
     )
     return TIMES
@@ -208,8 +208,8 @@ async def add_dosage_b(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.setdefault("selected_slots", set())
     presets = get_user_time_presets(update.effective_user.id)
     await update.message.reply_text(
-        f"⏰ *Когда принимать дозировку А ({escape_md(dosage_a)})?*\nВыбери один или несколько:",
-        parse_mode="Markdown",
+        f"⏰ <b>Когда принимать дозировку А ({escape_html(dosage_a)})?</b>\nВыбери один или несколько:",
+        parse_mode="HTML",
         reply_markup=_timeslots_keyboard(set(), presets, back_cb="back_multi_to_dosage_b")
     )
     return TIMES
@@ -249,8 +249,8 @@ async def add_timeslots_confirm(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data.setdefault("selected_slots_b", set())
         summary_a = _dosage_a_summary(context.user_data)
         await query.edit_message_text(
-            f"{summary_a}\n\n⏰ *Когда принимать дозировку Б ({escape_md(dosage_b)})?*\nВыбери один или несколько:",
-            parse_mode="Markdown",
+            f"{summary_a}\n\n⏰ <b>Когда принимать дозировку Б ({escape_html(dosage_b)})?</b>\nВыбери один или несколько:",
+            parse_mode="HTML",
             reply_markup=_timeslots_b_keyboard(context.user_data["selected_slots_b"], presets)
         )
         return TIMES_B
@@ -264,8 +264,8 @@ async def add_timeslots_confirm(update: Update, context: ContextTypes.DEFAULT_TY
         InlineKeyboardButton("❌ Отмена", callback_data="cancel_add"),
     ])
     await query.edit_message_text(
-        "🍽 *Как принимать с пищей?*",
-        parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
+        "🍽 <b>Как принимать с пищей?</b>",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return MEAL
 
@@ -295,8 +295,8 @@ async def add_timeslots_b_confirm(update: Update, context: ContextTypes.DEFAULT_
     if context.user_data.get("edit_id"):
         dosage_a = context.user_data["dosage"]
         await query.edit_message_text(
-            f"📅 *Расписание для дозировки А ({escape_md(dosage_a)})* — выбери:",
-            parse_mode="Markdown", reply_markup=_freq_type_keyboard()
+            f"📅 <b>Расписание для дозировки А ({escape_html(dosage_a)})</b> — выбери:",
+            parse_mode="HTML", reply_markup=_freq_type_keyboard()
         )
         return FREQ_TYPE
     keyboard = [
@@ -308,8 +308,8 @@ async def add_timeslots_b_confirm(update: Update, context: ContextTypes.DEFAULT_
         InlineKeyboardButton("❌ Отмена", callback_data="cancel_add"),
     ])
     await query.edit_message_text(
-        "🍽 *Как принимать с пищей?* (для обеих дозировок)",
-        parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
+        "🍽 <b>Как принимать с пищей?</b> (для обеих дозировок)",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return MEAL
 
@@ -323,13 +323,13 @@ async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("multi_dosage"):
         dosage_a = context.user_data["dosage"]
         await query.edit_message_text(
-            f"📅 *Расписание для дозировки А ({escape_md(dosage_a)})* — выбери:",
-            parse_mode="Markdown", reply_markup=_freq_type_keyboard()
+            f"📅 <b>Расписание для дозировки А ({escape_html(dosage_a)})</b> — выбери:",
+            parse_mode="HTML", reply_markup=_freq_type_keyboard()
         )
     else:
         await query.edit_message_text(
-            "📅 *Тип расписания* — выбери:",
-            parse_mode="Markdown", reply_markup=_freq_type_keyboard()
+            "📅 <b>Тип расписания</b> — выбери:",
+            parse_mode="HTML", reply_markup=_freq_type_keyboard()
         )
     return FREQ_TYPE
 
@@ -339,11 +339,11 @@ async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _go_to_freq_type_b(edit_target, context, from_message: bool = False):
     summary = _dosage_a_summary(context.user_data)
     dosage_b = context.user_data.get("dosage_b", "")
-    text = f"{summary}\n\n📅 *Расписание для дозировки Б ({escape_md(dosage_b)})* — выбери:"
+    text = f"{summary}\n\n📅 <b>Расписание для дозировки Б ({escape_html(dosage_b)})</b> — выбери:"
     if from_message:
-        await edit_target.reply_text(text, parse_mode="Markdown", reply_markup=_freq_type_b_keyboard())
+        await edit_target.reply_text(text, parse_mode="HTML", reply_markup=_freq_type_b_keyboard())
     else:
-        await edit_target.edit_message_text(text, parse_mode="Markdown", reply_markup=_freq_type_b_keyboard())
+        await edit_target.edit_message_text(text, parse_mode="HTML", reply_markup=_freq_type_b_keyboard())
     return FREQ_TYPE_B
 
 
@@ -383,21 +383,21 @@ async def choose_freq_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     if freq == "interval":
-        await query.edit_message_text("🔄 *Через сколько дней?* (например: 2):",
-                                      parse_mode="Markdown", reply_markup=_ADD_FREQ_INTERVAL_KB)
+        await query.edit_message_text("🔄 <b>Через сколько дней?</b> (например: 2):",
+                                      parse_mode="HTML", reply_markup=_ADD_FREQ_INTERVAL_KB)
         return FREQ_INTERVAL
 
     if freq == "weekdays":
         context.user_data["freq_weekdays"] = set()
         await query.edit_message_text(
-            "📆 *По дням недели* — выбери и нажми Готово:",
-            parse_mode="Markdown", reply_markup=_weekdays_keyboard(set())
+            "📆 <b>По дням недели</b> — выбери и нажми Готово:",
+            parse_mode="HTML", reply_markup=_weekdays_keyboard(set())
         )
         return FREQ_WEEKDAYS
 
     if freq == "monthly":
-        await query.edit_message_text("🗓 *Какого числа каждого месяца?* (1–31):",
-                                      parse_mode="Markdown", reply_markup=_ADD_FREQ_MONTHDAY_KB)
+        await query.edit_message_text("🗓 <b>Какого числа каждого месяца?</b> (1–31):",
+                                      parse_mode="HTML", reply_markup=_ADD_FREQ_MONTHDAY_KB)
         return FREQ_MONTHDAY
 
     return FREQ_TYPE
@@ -543,8 +543,8 @@ async def choose_freq_type_b(update: Update, context: ContextTypes.DEFAULT_TYPE)
         summary = _dosage_a_summary(context.user_data)
         dosage_b = context.user_data.get("dosage_b", "")
         await query.edit_message_text(
-            f"{summary}\n\n🔄 *Дозировка Б ({escape_md(dosage_b)}) — через сколько дней?* (например: 2):",
-            parse_mode="Markdown",
+            f"{summary}\n\n🔄 <b>Дозировка Б ({escape_html(dosage_b)}) — через сколько дней?</b> (например: 2):",
+            parse_mode="HTML",
             reply_markup=_back_cancel_kb("back_multi_to_freq_type_b")
         )
         return FREQ_INTERVAL_B
@@ -553,8 +553,8 @@ async def choose_freq_type_b(update: Update, context: ContextTypes.DEFAULT_TYPE)
         summary = _dosage_a_summary(context.user_data)
         dosage_b = context.user_data.get("dosage_b", "")
         await query.edit_message_text(
-            f"{summary}\n\n📆 *Дозировка Б ({escape_md(dosage_b)}) — дни недели:*",
-            parse_mode="Markdown",
+            f"{summary}\n\n📆 <b>Дозировка Б ({escape_html(dosage_b)}) — дни недели:</b>",
+            parse_mode="HTML",
             reply_markup=_weekdays_b_keyboard(set())
         )
         return FREQ_WEEKDAYS_B
@@ -562,8 +562,8 @@ async def choose_freq_type_b(update: Update, context: ContextTypes.DEFAULT_TYPE)
         summary = _dosage_a_summary(context.user_data)
         dosage_b = context.user_data.get("dosage_b", "")
         await query.edit_message_text(
-            f"{summary}\n\n🗓 *Дозировка Б ({escape_md(dosage_b)}) — какого числа каждого месяца?* (1–31):",
-            parse_mode="Markdown",
+            f"{summary}\n\n🗓 <b>Дозировка Б ({escape_html(dosage_b)}) — какого числа каждого месяца?</b> (1–31):",
+            parse_mode="HTML",
             reply_markup=_back_cancel_kb("back_multi_to_freq_type_b")
         )
         return FREQ_MONTHDAY_B
@@ -588,7 +588,7 @@ async def add_freq_interval_b_days(update: Update, context: ContextTypes.DEFAULT
     )
     await update.message.reply_text(
         f"🔄 Каждые {n} дн. — с какого дня начинать дозировку Б?{hint}",
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("📅 Сегодня (те же дни что А)", callback_data="freqb_anchor:0"),
             InlineKeyboardButton("📅 Завтра (чередование)", callback_data="freqb_anchor:1"),
@@ -722,19 +722,19 @@ async def _save_multi_medication(edit_target, context, user_id: int,
 
     text = (
         f"✅ Лекарство {'обновлено' if is_edit_mode else 'добавлено'}!\n\n"
-        f"💊 *{escape_md(name)}*\n"
+        f"💊 <b>{escape_html(name)}</b>\n"
         f"🍽 {MEAL_LABELS[meal]}\n\n"
-        f"Дозировка А: *{escape_md(dosage_a)}*\n"
+        f"Дозировка А: <b>{escape_html(dosage_a)}</b>\n"
         f"⏰ {', '.join(times_a)} — {freq_a_label}\n\n"
-        f"Дозировка Б: *{escape_md(dosage_b)}*\n"
+        f"Дозировка Б: <b>{escape_html(dosage_b)}</b>\n"
         f"⏰ {', '.join(times_b)} — {freq_b_label}"
         f"{warning}"
     )
 
     if from_message:
-        await edit_target.reply_text(text, parse_mode="Markdown", reply_markup=_saved_keyboard(saved_id))
+        await edit_target.reply_text(text, parse_mode="HTML", reply_markup=_saved_keyboard(saved_id))
     else:
-        await edit_target.edit_message_text(text, parse_mode="Markdown", reply_markup=_saved_keyboard(saved_id))
+        await edit_target.edit_message_text(text, parse_mode="HTML", reply_markup=_saved_keyboard(saved_id))
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -764,8 +764,8 @@ async def back_multi_to_dosage_a(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     context.user_data.pop("dosage", None)
     await query.edit_message_text(
-        "Введи *дозировку А* (например: 25 мкг):",
-        parse_mode="Markdown",
+        "Введи <b>дозировку А</b> (например: 25 мкг):",
+        parse_mode="HTML",
         reply_markup=_back_cancel_kb("back_add_to_name")
     )
     return DOSAGE
@@ -777,8 +777,8 @@ async def back_multi_to_dosage_b(update: Update, context: ContextTypes.DEFAULT_T
     dosage_a = context.user_data.get("dosage", "")
     context.user_data.pop("dosage_b", None)
     await query.edit_message_text(
-        f"Введи *дозировку Б* (например: 50 мкг):\n_Дозировка А: {escape_md(dosage_a)}_",
-        parse_mode="Markdown",
+        f"Введи <b>дозировку Б</b> (например: 50 мкг):\n<i>Дозировка А: {escape_html(dosage_a)}</i>",
+        parse_mode="HTML",
         reply_markup=_back_cancel_kb("back_multi_to_dosage_a")
     )
     return DOSAGE_B
@@ -793,15 +793,15 @@ async def back_add_to_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
         summary_a = _dosage_a_summary(context.user_data)
         dosage_b = context.user_data.get("dosage_b", "")
         await query.edit_message_text(
-            f"{summary_a}\n\n⏰ *Когда принимать дозировку Б ({escape_md(dosage_b)})?*\nВыбери один или несколько:",
-            parse_mode="Markdown",
+            f"{summary_a}\n\n⏰ <b>Когда принимать дозировку Б ({escape_html(dosage_b)})?</b>\nВыбери один или несколько:",
+            parse_mode="HTML",
             reply_markup=_timeslots_b_keyboard(selected_b, presets)
         )
         return TIMES_B
     selected = context.user_data.get("selected_slots", set())
     await query.edit_message_text(
-        "⏰ *Когда принимать?* — выбери один или несколько:\n\n_Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов._",
-        parse_mode="Markdown",
+        "⏰ <b>Когда принимать?</b> — выбери один или несколько:\n\n<i>Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов.</i>",
+        parse_mode="HTML",
         reply_markup=_timeslots_keyboard(selected, presets)
     )
     return TIMES
@@ -814,8 +814,8 @@ async def back_multi_to_times_a(update: Update, context: ContextTypes.DEFAULT_TY
     presets = get_user_time_presets(update.effective_user.id)
     dosage_a = context.user_data.get("dosage", "")
     await query.edit_message_text(
-        f"⏰ *Когда принимать дозировку А ({escape_md(dosage_a)})?*\nВыбери один или несколько:",
-        parse_mode="Markdown",
+        f"⏰ <b>Когда принимать дозировку А ({escape_html(dosage_a)})?</b>\nВыбери один или несколько:",
+        parse_mode="HTML",
         reply_markup=_timeslots_keyboard(selected, presets, back_cb="back_multi_to_dosage_b")
     )
     return TIMES
@@ -829,8 +829,8 @@ async def back_add_to_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if context.user_data.get("freq_a"):
             dosage_a = context.user_data.get("dosage", "")
             await query.edit_message_text(
-                f"📅 *Расписание для дозировки А ({escape_md(dosage_a)})* — выбери:",
-                parse_mode="Markdown", reply_markup=_freq_type_keyboard()
+                f"📅 <b>Расписание для дозировки А ({escape_html(dosage_a)})</b> — выбери:",
+                parse_mode="HTML", reply_markup=_freq_type_keyboard()
             )
             return FREQ_TYPE
         else:
@@ -838,8 +838,8 @@ async def back_add_to_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             dosage_b = context.user_data.get("dosage_b", "")
             summary_a = _dosage_a_summary(context.user_data)
             await query.edit_message_text(
-                f"{summary_a}\n\n⏰ *Когда принимать дозировку Б ({escape_md(dosage_b)})?*\nВыбери один или несколько:",
-                parse_mode="Markdown",
+                f"{summary_a}\n\n⏰ <b>Когда принимать дозировку Б ({escape_html(dosage_b)})?</b>\nВыбери один или несколько:",
+                parse_mode="HTML",
                 reply_markup=_timeslots_b_keyboard(selected_b, presets)
             )
             return TIMES_B
@@ -852,8 +852,8 @@ async def back_add_to_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("❌ Отмена", callback_data="cancel_add"),
     ])
     await query.edit_message_text(
-        "🍽 *Как принимать с пищей?*",
-        parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
+        "🍽 <b>Как принимать с пищей?</b>",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return MEAL
 
@@ -864,13 +864,13 @@ async def back_add_to_freq_type(update: Update, context: ContextTypes.DEFAULT_TY
     if context.user_data.get("multi_dosage"):
         dosage_a = context.user_data.get("dosage", "")
         await query.edit_message_text(
-            f"📅 *Расписание для дозировки А ({escape_md(dosage_a)})* — выбери:",
-            parse_mode="Markdown", reply_markup=_freq_type_keyboard()
+            f"📅 <b>Расписание для дозировки А ({escape_html(dosage_a)})</b> — выбери:",
+            parse_mode="HTML", reply_markup=_freq_type_keyboard()
         )
     else:
         await query.edit_message_text(
-            "📅 *Тип расписания* — выбери:",
-            parse_mode="Markdown", reply_markup=_freq_type_keyboard()
+            "📅 <b>Тип расписания</b> — выбери:",
+            parse_mode="HTML", reply_markup=_freq_type_keyboard()
         )
     return FREQ_TYPE
 

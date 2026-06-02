@@ -4,7 +4,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator, model_validator
 import database as db
-from api.auth import require_telegram_user
+from api.auth import require_db_user, TelegramUser
 from constants import MAX_MEDICATIONS_PER_USER
 from utils import parse_time
 
@@ -100,10 +100,9 @@ class MedicationUpdate(BaseModel):
 
 
 @router.get("")
-async def list_medications(telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    meds = await asyncio.to_thread(db.get_user_medications, user_id)
-    rules = await asyncio.to_thread(db.get_rules_grouped_for_user, user_id)
+async def list_medications(user: TelegramUser = Depends(require_db_user)):
+    meds = await asyncio.to_thread(db.get_user_medications, user.user_id)
+    rules = await asyncio.to_thread(db.get_rules_grouped_for_user, user.user_id)
     return [
         {**dict(m), "rules": [dict(r) for r in rules.get(m["id"], [])]}
         for m in meds
@@ -111,19 +110,18 @@ async def list_medications(telegram_id: int = Depends(require_telegram_user)):
 
 
 @router.post("", status_code=201)
-async def create_medication(body: MedicationIn, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
+async def create_medication(body: MedicationIn, user: TelegramUser = Depends(require_db_user)):
     # S2: dependent_id приходит от клиента — проверяем владельца, иначе лекарство
     # можно привязать к чужому подопечному.
     if body.dependent_id is not None:
-        deps = await asyncio.to_thread(db.get_dependents, telegram_id)
+        deps = await asyncio.to_thread(db.get_dependents, user.telegram_id)
         if body.dependent_id not in {d["id"] for d in deps}:
             raise HTTPException(404, "Подопечный не найден")
-    count = await asyncio.to_thread(db.count_active_medications, user_id, body.dependent_id)
+    count = await asyncio.to_thread(db.count_active_medications, user.user_id, body.dependent_id)
     if count >= MAX_MEDICATIONS_PER_USER:
         raise HTTPException(400, f"Лимит {MAX_MEDICATIONS_PER_USER} лекарств достигнут")
     med_id = await asyncio.to_thread(
-        db.add_medication, user_id, body.name, body.dosage,
+        db.add_medication, user.user_id, body.name, body.dosage,
         body.meal_relation, body.times_per_day, body.dependent_id,
     )
     for rule in body.rules:
@@ -138,13 +136,12 @@ async def create_medication(body: MedicationIn, telegram_id: int = Depends(requi
 @router.put("/{med_id}")
 async def update_medication(
     med_id: int, body: MedicationUpdate,
-    telegram_id: int = Depends(require_telegram_user),
+    user: TelegramUser = Depends(require_db_user),
 ):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user_id):
+    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user.user_id):
         raise HTTPException(404, "Лекарство не найдено")
     await asyncio.to_thread(
-        db.update_medication, med_id, user_id,
+        db.update_medication, med_id, user.user_id,
         body.name, body.dosage, body.meal_relation, body.times_per_day,
         [r.model_dump() for r in body.rules],
     )
@@ -152,24 +149,21 @@ async def update_medication(
 
 
 @router.delete("/{med_id}", status_code=204)
-async def delete_medication(med_id: int, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user_id):
+async def delete_medication(med_id: int, user: TelegramUser = Depends(require_db_user)):
+    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user.user_id):
         raise HTTPException(404, "Лекарство не найдено")
-    await asyncio.to_thread(db.deactivate_medication, med_id, user_id)
+    await asyncio.to_thread(db.deactivate_medication, med_id, user.user_id)
 
 
 @router.post("/{med_id}/pause", status_code=204)
-async def pause_medication(med_id: int, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user_id):
+async def pause_medication(med_id: int, user: TelegramUser = Depends(require_db_user)):
+    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user.user_id):
         raise HTTPException(404, "Лекарство не найдено")
-    await asyncio.to_thread(db.set_medication_paused, med_id, user_id, True)
+    await asyncio.to_thread(db.set_medication_paused, med_id, user.user_id, True)
 
 
 @router.post("/{med_id}/resume", status_code=204)
-async def resume_medication(med_id: int, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user_id):
+async def resume_medication(med_id: int, user: TelegramUser = Depends(require_db_user)):
+    if not await asyncio.to_thread(db.get_medication_by_id, med_id, user.user_id):
         raise HTTPException(404, "Лекарство не найдено")
-    await asyncio.to_thread(db.set_medication_paused, med_id, user_id, False)
+    await asyncio.to_thread(db.set_medication_paused, med_id, user.user_id, False)

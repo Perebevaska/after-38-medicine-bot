@@ -24,19 +24,19 @@ def _settings_text(tz: str, mode_label: str, presets: dict, daily_plan: dict,
     dp_line = f"✅ Вкл — {daily_plan['time']}" if daily_plan["enabled"] else "❌ Выкл"
     cg_line = "✅ Вкл" if caregiver_enabled else "❌ Выкл"
     return (
-        f"⚙️ *Настройки*\n\n"
-        f"🌍 Часовой пояс: `{tz}`\n"
+        f"⚙️ <b>Настройки</b>\n\n"
+        f"🌍 Часовой пояс: <code>{tz}</code>\n"
         f"🔔 Напоминания: {mode_label}\n"
         f"⏰ Время приёмов: {presets_line}\n"
         f"📋 План на день: {dp_line}\n"
         f"👨‍👩‍👧 Caregiver-режим: {cg_line}\n\n"
-        f"_🌍 Используется для точного времени напоминаний._\n"
-        f"_🔔 «Один раз» — уведомление приходит один раз в назначенное время. "
-        f"«Повторять» — каждые 5 мин до подтверждения приёма._\n"
-        f"_⏰ Временные слоты при добавлении лекарства (Утро / Обед / Вечер / Ночь)._\n"
-        f"_📋 Присылает утреннее сообщение со списком лекарств на сегодня._\n"
-        f"_👨‍👩‍👧 Отслеживание приёма лекарств для близких (до 2 подопечных)._\n"
-        f"_🗑 Удаляет все твои лекарства, расписания, историю приёмов и настройки._"
+        f"<i>🌍 Используется для точного времени напоминаний.</i>\n"
+        f"<i>🔔 «Один раз» — уведомление приходит один раз в назначенное время. "
+        f"«Повторять» — каждые 5 мин до подтверждения приёма.</i>\n"
+        f"<i>⏰ Временные слоты при добавлении лекарства (Утро / Обед / Вечер / Ночь).</i>\n"
+        f"<i>📋 Присылает утреннее сообщение со списком лекарств на сегодня.</i>\n"
+        f"<i>👨‍👩‍👧 Отслеживание приёма лекарств для близких (до 2 подопечных).</i>\n"
+        f"<i>🗑 Удаляет все твои лекарства, расписания, историю приёмов и настройки.</i>"
     )
 
 
@@ -116,7 +116,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
     await update.message.reply_text(
         _settings_text(tz, mode_label, presets, dp, cg),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
     )
 
@@ -133,7 +133,7 @@ async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT
     tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
     await query.edit_message_text(
         _settings_text(tz, mode_label, presets, dp, cg),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
     )
 
@@ -146,8 +146,8 @@ async def handle_show_presets(update: Update, context: ContextTypes.DEFAULT_TYPE
     user = update.effective_user
     presets = get_user_time_presets(user.id)
     await query.edit_message_text(
-        "⏰ *Время приёмов*\n\nНажми чтобы изменить:",
-        parse_mode="Markdown",
+        "⏰ <b>Время приёмов</b>\n\nНажми чтобы изменить:",
+        parse_mode="HTML",
         reply_markup=_presets_keyboard(presets)
     )
 
@@ -161,8 +161,8 @@ async def handle_preset_select(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["preset_slot"] = slot
     label = SLOT_LABELS[slot]
     await query.message.reply_text(
-        f"✏️ Введи новое время для *{label}* (ЧЧ:ММ, например 09:00):",
-        parse_mode="Markdown",
+        f"✏️ Введи новое время для <b>{label}</b> (ЧЧ:ММ, например 09:00):",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("❌ Отмена", callback_data="cancel_preset")
         ]])
@@ -183,10 +183,10 @@ async def handle_preset_time_input(update: Update, context: ContextTypes.DEFAULT
     updated = set_user_time_preset(user.id, slot, time_str)
     presets = get_user_time_presets(user.id)
     label = SLOT_LABELS[slot]
-    note = f"\n_Перенесено приёмов на новое время: {updated}._" if updated else ""
+    note = f"\n<i>Перенесено приёмов на новое время: {updated}.</i>" if updated else ""
     await update.message.reply_text(
-        f"✅ *{label}* → {time_str}{note}\n\nНажми чтобы изменить другое:",
-        parse_mode="Markdown",
+        f"✅ <b>{label}</b> → {time_str}{note}\n\nНажми чтобы изменить другое:",
+        parse_mode="HTML",
         reply_markup=_presets_keyboard(presets)
     )
     context.user_data.clear()
@@ -208,7 +208,7 @@ def _daily_plan_text(dp: dict) -> str:
     """Формирует текст страницы настройки плана дня."""
     status = "✅ Включён" if dp["enabled"] else "❌ Выключен"
     return (
-        f"📋 *План на день*\n\n"
+        f"📋 <b>План на день</b>\n\n"
         f"Статус: {status}\n"
         f"Время отправки: {dp['time']}\n\n"
         f"Бот присылает список лекарств, которые сегодня нужно принять."
@@ -223,7 +223,7 @@ async def handle_daily_plan_settings(update: Update, context: ContextTypes.DEFAU
     dp = get_daily_plan_settings(update.effective_user.id)
     await query.edit_message_text(
         _daily_plan_text(dp),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_daily_plan_keyboard(dp)
     )
 
@@ -239,7 +239,7 @@ async def handle_daily_plan_toggle(update: Update, context: ContextTypes.DEFAULT
     dp = get_daily_plan_settings(user.id)
     await query.edit_message_text(
         _daily_plan_text(dp),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_daily_plan_keyboard(dp)
     )
 
@@ -253,7 +253,7 @@ async def handle_daily_plan_back(update: Update, context: ContextTypes.DEFAULT_T
     tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
     await query.edit_message_text(
         _settings_text(tz, mode_label, presets, dp, cg),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
     )
 
@@ -266,7 +266,7 @@ async def handle_daily_plan_time_select(update: Update, context: ContextTypes.DE
     dp = get_daily_plan_settings(update.effective_user.id)
     await query.message.reply_text(
         f"⏰ Введи время отправки плана дня (ЧЧ:ММ):\nТекущее: {dp['time']}",
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("❌ Отмена", callback_data="cancel_daily_plan_time")
         ]])
@@ -287,7 +287,7 @@ async def handle_daily_plan_time_input(update: Update, context: ContextTypes.DEF
     dp = get_daily_plan_settings(user.id)
     await update.message.reply_text(
         f"✅ Время обновлено → {time_str}\n\n" + _daily_plan_text(dp),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_daily_plan_keyboard(dp)
     )
     context.user_data.clear()
@@ -301,7 +301,7 @@ async def cancel_daily_plan_time(update: Update, context: ContextTypes.DEFAULT_T
     dp = get_daily_plan_settings(update.effective_user.id)
     await query.edit_message_text(
         _daily_plan_text(dp),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_daily_plan_keyboard(dp)
     )
     context.user_data.clear()
@@ -316,13 +316,13 @@ async def handle_delete_request(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "⚠️ *Удаление данных*\n\n"
+        "⚠️ <b>Удаление данных</b>\n\n"
         "Это действие необратимо. Будут удалены:\n"
         "• Все лекарства и расписания\n"
         "• Вся история приёмов\n"
         "• Настройки (часовой пояс, напоминания)\n\n"
         "Уверен?",
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Да, удалить всё", callback_data="delete_data_confirm"),
             InlineKeyboardButton("❌ Отмена", callback_data="delete_data_cancel"),
@@ -353,7 +353,7 @@ async def handle_delete_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
     tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
     await query.edit_message_text(
         _settings_text(tz, mode_label, presets, dp, cg),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
     )
 
@@ -367,7 +367,7 @@ async def handle_settings_back(update: Update, context: ContextTypes.DEFAULT_TYP
     tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
     await query.edit_message_text(
         _settings_text(tz, mode_label, presets, dp, cg),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
     )
 
@@ -376,7 +376,7 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик /about: показывает информацию о проекте и планах развития."""
     await update.message.reply_text(
         ABOUT_TEXT,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         disable_web_page_preview=True,
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ В меню", callback_data="menu:main")

@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 from database import get_or_create_user, get_user_medications, get_rules_grouped_for_user
 from schedule_utils import days_of_stock_left
 from constants import MEAL_LABELS, MAX_MEDICATIONS_PER_USER, SLOT_ORDER, SLOT_LABELS, MONTHS_SHORT
-from utils import handle_db_errors, get_tz_for_user, escape_md, NAME_MAX_LEN, DOSAGE_MAX_LEN
+from utils import handle_db_errors, get_tz_for_user, escape_html, NAME_MAX_LEN, DOSAGE_MAX_LEN
 
 logger = logging.getLogger(__name__)
 
@@ -300,7 +300,7 @@ def _dosage_a_summary(ud: dict) -> str:
     times_a = ud.get("collected_times", [])
     freq_a = ud.get("freq_a", {})
     times_str = ", ".join(times_a) if times_a else "—"
-    summary = f"📋 Дозировка А: *{escape_md(dosage_a)}* — {times_str}"
+    summary = f"📋 Дозировка А: <b>{escape_html(dosage_a)}</b> — {times_str}"
     if freq_a:
         freq_str = _freq_label(
             freq_a.get("type", "daily"),
@@ -386,7 +386,7 @@ def _med_card_text(med, rules, today_local) -> str:
         for r in rules:
             effective = r["dosage"] if r["dosage"] else med["dosage"]
             label = _next_fire_label(r, today_local)
-            rule_strs.append(f"⏰ {_format_schedule_rule(r)} — {escape_md(effective)}{label}")
+            rule_strs.append(f"⏰ {_format_schedule_rule(r)} — {escape_html(effective)}{label}")
         schedule_str = "\n".join(rule_strs) or "не указано"
     elif not has_advanced:
         schedule_str = ", ".join(r["reminder_time"] for r in rules) or "не указано"
@@ -394,10 +394,10 @@ def _med_card_text(med, rules, today_local) -> str:
         schedule_str = "\n".join(_format_schedule_rule(r) for r in rules) or "не указано"
 
     meal = MEAL_LABELS.get(med["meal_relation"], med["meal_relation"])
-    dep_label = f" _({escape_md(med['dependent_name'])})_" if med["dependent_name"] else ""
-    paused_mark = "  ⏸ _на паузе_" if med["paused"] else ""
+    dep_label = f" <i>({escape_html(med['dependent_name'])})</i>" if med["dependent_name"] else ""
+    paused_mark = "  ⏸ <i>на паузе</i>" if med["paused"] else ""
     text = (
-        f"*{escape_md(med['name'])}*{dep_label} — {escape_md(dosage_display)}{paused_mark}\n"
+        f"<b>{escape_html(med['name'])}</b>{dep_label} — {escape_html(dosage_display)}{paused_mark}\n"
         f"🍽 {meal}\n"
     )
     if not has_advanced and not is_multi_dosage:
@@ -457,7 +457,7 @@ async def show_meds_list(message, user):
         rules = rules_by_med.get(med["id"], [])
         text = _med_card_text(med, rules, today_local)
         keyboard = _med_card_keyboard(med["id"], bool(med["paused"]), is_last=(i == last_idx))
-        await message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+        await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 @handle_db_errors

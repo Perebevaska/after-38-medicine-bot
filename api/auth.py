@@ -2,13 +2,16 @@
 
 Алгоритм: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
 """
+import asyncio
 import hashlib
 import hmac
 import json
 import os
 import time
+from dataclasses import dataclass
 from urllib.parse import parse_qsl
 
+import database as db
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -49,6 +52,13 @@ def verify_init_data(init_data: str, bot_token: str, max_age: int = MAX_AGE) -> 
     return int(telegram_id)
 
 
+@dataclass
+class TelegramUser:
+    """Содержит telegram_id (из подписи) и user_id (INTEGER PK из БД)."""
+    telegram_id: int
+    user_id: int
+
+
 _bearer = HTTPBearer(scheme_name="Telegram Mini App")
 
 
@@ -66,3 +76,13 @@ async def require_telegram_user(
         return verify_init_data(credentials.credentials, bot_token)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+
+async def require_db_user(telegram_id: int = Depends(require_telegram_user)) -> TelegramUser:
+    """FastAPI dependency: валидирует initData, возвращает (telegram_id, user_id из БД).
+
+    Создаёт запись пользователя в БД если её ещё нет (идемпотентно).
+    Используется вместо require_telegram_user в эндпоинтах, которым нужен INTEGER PK.
+    """
+    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
+    return TelegramUser(telegram_id=telegram_id, user_id=user_id)

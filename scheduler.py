@@ -5,7 +5,7 @@ import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from database import (get_active_schedule_rows, log_intake, apply_intake_stock,
                       get_schedules_by_medication, get_or_create_user, get_medication_by_id)
-from utils import escape_md, get_tz_for_user, local_day_bounds_utc
+from utils import escape_html, get_tz_for_user, local_day_bounds_utc
 # _rule_fires_today живёт в schedule_utils (чистая логика, без telegram/db);
 # реэкспорт для обратной совместимости: stats/export/timezone импортируют его отсюда.
 from schedule_utils import _rule_fires_today, days_of_stock_left
@@ -83,16 +83,16 @@ async def send_reminders(app):
         ]])
 
         dosage = row["rule_dosage"] or row["med_dosage"]
-        dep_suffix = f" _({escape_md(row['dependent_name'])})_" if row["dependent_name"] else ""
+        dep_suffix = f" <i>({escape_html(row['dependent_name'])})</i>" if row["dependent_name"] else ""
         try:
             await app.bot.send_message(
                 chat_id=row["telegram_id"],
                 text=(
                     f"💊 Время принять лекарство!\n\n"
-                    f"*{escape_md(row['name'])}*{dep_suffix} — {escape_md(dosage)}\n"
+                    f"<b>{escape_html(row['name'])}</b>{dep_suffix} — {escape_html(dosage)}\n"
                     f"🍽 Принимать {_MEAL_LABELS.get(row['meal_relation'], row['meal_relation'])}"
                 ),
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=keyboard
             )
             _pending[key] = now_utc
@@ -157,13 +157,13 @@ async def _send_daily_plans(app, schedules):
         if not data["meds"]:
             continue
 
-        lines = ["🌅 *Доброе утро!*\n", "📋 *Сегодня нужно принять:*\n"]
+        lines = ["🌅 <b>Доброе утро!</b>\n", "📋 <b>Сегодня нужно принять:</b>\n"]
         for med in data["meds"].values():
             meal = _MEAL_LABELS.get(med["meal_relation"], "")
-            dep_label = f" _({escape_md(med['dep_name'])})_" if med["dep_name"] else ""
-            lines.append(f"💊 *{escape_md(med['name'])}*{dep_label}")
+            dep_label = f" <i>({escape_html(med['dep_name'])})</i>" if med["dep_name"] else ""
+            lines.append(f"💊 <b>{escape_html(med['name'])}</b>{dep_label}")
             for reminder_time, dosage in sorted(med["times"]):
-                lines.append(f"   ⏰ {reminder_time} — {escape_md(dosage)} — {meal}")
+                lines.append(f"   ⏰ {reminder_time} — {escape_html(dosage)} — {meal}")
         lines.append("\nНе забудь взять лекарства с собой! 🎒")
         lines.append("Продуктивного дня! 🚀")
 
@@ -171,7 +171,7 @@ async def _send_daily_plans(app, schedules):
             await app.bot.send_message(
                 chat_id=tid,
                 text="\n".join(lines),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             _daily_plan_sent.add(plan_key)
             logger.info("План дня отправлен: %s", tid)
@@ -253,9 +253,9 @@ async def _update_stock_on_intake(reply_fn, medication_id, new_status, old_statu
     if after is not None and after <= thr and (before is None or before > thr):
         user_id = await asyncio.to_thread(get_or_create_user, telegram_id)
         med = await asyncio.to_thread(get_medication_by_id, medication_id, user_id)
-        name = escape_md(med["name"]) if med else "Лекарство"
+        name = escape_html(med["name"]) if med else "Лекарство"
         await reply_fn(
-            f"⚠️ *{name}* скоро закончится: осталось примерно на {after} дн. ({qty:g} шт.).\n"
+            f"⚠️ <b>{name}</b> скоро закончится: осталось примерно на {after} дн. ({qty:g} шт.).\n"
             f"Не забудь пополнить запас 📦",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )

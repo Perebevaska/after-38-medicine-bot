@@ -2,7 +2,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import database as db
-from api.auth import require_telegram_user
+from api.auth import require_db_user, TelegramUser
 from schedule_utils import days_of_stock_left
 from datetime import date
 
@@ -33,9 +33,8 @@ async def _get_med_or_404(med_id: int, user_id: int):
 
 
 @router.get("/{med_id}/stock")
-async def get_stock(med_id: int, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    med = await _get_med_or_404(med_id, user_id)
+async def get_stock(med_id: int, user: TelegramUser = Depends(require_db_user)):
+    med = await _get_med_or_404(med_id, user.user_id)
     rules = await asyncio.to_thread(db.get_schedules_by_medication, med_id)
     days_left = (
         days_of_stock_left(rules, med["stock_qty"], med["units_per_dose"], date.today())
@@ -50,35 +49,30 @@ async def get_stock(med_id: int, telegram_id: int = Depends(require_telegram_use
 
 
 @router.put("/{med_id}/stock", status_code=204)
-async def set_stock(med_id: int, body: StockSet, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    await _get_med_or_404(med_id, user_id)
-    await asyncio.to_thread(db.set_medication_stock, med_id, user_id, body.qty)
+async def set_stock(med_id: int, body: StockSet, user: TelegramUser = Depends(require_db_user)):
+    await _get_med_or_404(med_id, user.user_id)
+    await asyncio.to_thread(db.set_medication_stock, med_id, user.user_id, body.qty)
 
 
 @router.post("/{med_id}/stock/add", status_code=204)
-async def add_stock(med_id: int, body: StockAdd, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    await _get_med_or_404(med_id, user_id)
-    await asyncio.to_thread(db.add_medication_stock, med_id, user_id, body.amount)
+async def add_stock(med_id: int, body: StockAdd, user: TelegramUser = Depends(require_db_user)):
+    await _get_med_or_404(med_id, user.user_id)
+    await asyncio.to_thread(db.add_medication_stock, med_id, user.user_id, body.amount)
 
 
 @router.put("/{med_id}/stock/units", status_code=204)
-async def set_units(med_id: int, body: UnitsSet, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    await _get_med_or_404(med_id, user_id)
-    await asyncio.to_thread(db.set_units_per_dose, med_id, user_id, body.units)
+async def set_units(med_id: int, body: UnitsSet, user: TelegramUser = Depends(require_db_user)):
+    await _get_med_or_404(med_id, user.user_id)
+    await asyncio.to_thread(db.set_units_per_dose, med_id, user.user_id, body.units)
 
 
 @router.put("/{med_id}/stock/threshold", status_code=204)
-async def set_threshold(med_id: int, body: ThresholdSet, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    await _get_med_or_404(med_id, user_id)
-    await asyncio.to_thread(db.set_low_stock_days, med_id, user_id, body.days)
+async def set_threshold(med_id: int, body: ThresholdSet, user: TelegramUser = Depends(require_db_user)):
+    await _get_med_or_404(med_id, user.user_id)
+    await asyncio.to_thread(db.set_low_stock_days, med_id, user.user_id, body.days)
 
 
 @router.delete("/{med_id}/stock", status_code=204)
-async def disable_stock(med_id: int, telegram_id: int = Depends(require_telegram_user)):
-    user_id = await asyncio.to_thread(db.get_or_create_user, telegram_id)
-    await _get_med_or_404(med_id, user_id)
-    await asyncio.to_thread(db.disable_stock_tracking, med_id, user_id)
+async def disable_stock(med_id: int, user: TelegramUser = Depends(require_db_user)):
+    await _get_med_or_404(med_id, user.user_id)
+    await asyncio.to_thread(db.disable_stock_tracking, med_id, user.user_id)

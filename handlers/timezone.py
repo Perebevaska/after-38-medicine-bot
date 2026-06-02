@@ -10,7 +10,7 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from database import (get_or_create_user, get_user_timezone, set_user_timezone,
                       get_schedules_for_user, get_today_intake_statuses, log_intake)
 from constants import SETUP_TZ, SETUP_CITY, ABOUT_TEXT
-from utils import handle_db_errors, get_tz_for_user, escape_md, local_day_bounds_utc
+from utils import handle_db_errors, get_tz_for_user, escape_html, local_day_bounds_utc
 import logging
 
 logger = logging.getLogger(__name__)
@@ -117,20 +117,20 @@ async def _render_today_screen(query, user):
         return
     start_utc, end_utc = local_day_bounds_utc(user_tz, now_local)
     statuses = get_today_intake_statuses(user.id, start_utc, end_utc)
-    lines = ["📋 *Лекарства на сегодня:*\n"]
+    lines = ["📋 <b>Лекарства на сегодня:</b>\n"]
     pending_list = []
     for med in meds.values():
         meal = _MEAL_LABELS.get(med["meal_relation"], "")
-        dep_label = f" _({escape_md(med['dep_name'])})_" if med["dep_name"] else ""
-        lines.append(f"💊 *{escape_md(med['name'])}*{dep_label} — {meal}")
+        dep_label = f" <i>({escape_html(med['dep_name'])})</i>" if med["dep_name"] else ""
+        lines.append(f"💊 <b>{escape_html(med['name'])}</b>{dep_label} — {meal}")
         for reminder_time, mid, dosage in sorted(med["times"]):
             st = statuses.get((mid, reminder_time))
             icon = "✅" if st == "taken" else ("❌" if st == "skipped" else "⏳")
-            lines.append(f"   {icon} {reminder_time} — {escape_md(dosage)}")
+            lines.append(f"   {icon} {reminder_time} — {escape_html(dosage)}")
             if st not in ("taken", "skipped"):
                 pending_list.append((mid, reminder_time))
     await query.edit_message_text(
-        "\n".join(lines), parse_mode="Markdown",
+        "\n".join(lines), parse_mode="HTML",
         reply_markup=_today_keyboard(bool(pending_list))
     )
 
@@ -200,14 +200,14 @@ async def handle_menu_callback(update, context):
         tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
         await query.edit_message_text(
             _settings_text(tz, mode_label, presets, dp, cg),
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
         )
 
     elif action == "about":
         await query.edit_message_text(
             ABOUT_TEXT,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             disable_web_page_preview=True,
             reply_markup=back_menu_kb()
         )
@@ -262,7 +262,7 @@ async def _back_to_settings_from_tz(update: Update, context: ContextTypes.DEFAUL
     await update.message.reply_text("⚙️ Возврат в настройки", reply_markup=ReplyKeyboardRemove())
     await update.message.reply_text(
         _settings_text(tz, mode_label, presets, dp, cg),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
     )
     return ConversationHandler.END
@@ -296,12 +296,12 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if tz_name:
         set_user_timezone(update.effective_user.id, tz_name)
         await update.message.reply_text(
-            f"✅ Часовой пояс: *{tz_name}*",
-            parse_mode="Markdown",
+            f"✅ Часовой пояс: <code>{tz_name}</code>",
+            parse_mode="HTML",
             reply_markup=ReplyKeyboardRemove()
         )
         await show_main_menu(update, update.effective_user.first_name,
-                             hint="Нажми 💊 *Мои лекарства*, чтобы добавить первое лекарство.")
+                             hint="Нажми 💊 <b>Мои лекарства</b>, чтобы добавить первое лекарство.")
         return ConversationHandler.END
     await update.message.reply_text(
         "Не удалось определить часовой пояс. Введи город:",
@@ -324,12 +324,12 @@ async def handle_city_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if tz_name:
             set_user_timezone(update.effective_user.id, tz_name)
             await update.message.reply_text(
-                f"✅ Часовой пояс: *{tz_name}*",
-                parse_mode="Markdown",
+                f"✅ Часовой пояс: <code>{tz_name}</code>",
+                parse_mode="HTML",
                 reply_markup=ReplyKeyboardRemove()
             )
             await show_main_menu(update, update.effective_user.first_name,
-                                 hint="Нажми 💊 *Мои лекарства*, чтобы добавить первое лекарство.")
+                                 hint="Нажми 💊 <b>Мои лекарства</b>, чтобы добавить первое лекарство.")
             return ConversationHandler.END
     await update.message.reply_text("Город не найден. Попробуй ещё раз:")
     return SETUP_CITY

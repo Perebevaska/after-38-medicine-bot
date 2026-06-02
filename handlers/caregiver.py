@@ -4,23 +4,23 @@ from telegram.ext import (ContextTypes, ConversationHandler,
 from database import (get_caregiver_mode, set_caregiver_mode,
                       get_dependents, add_dependent, delete_dependent, count_dependents)
 from constants import ADD_DEPENDENT_NAME, MAX_DEPENDENTS, DEPENDENT_NAME_MAX_LEN
-from utils import handle_db_errors, escape_md
+from utils import handle_db_errors, escape_html
 
 
 def _caregiver_text(enabled: bool, dependents: list) -> str:
     status = "✅ Включён" if enabled else "❌ Выключен"
     dep_count = len(dependents)
     lines = [
-        "👨‍👩‍👧 *Caregiver-режим*\n",
+        "👨‍👩‍👧 <b>Caregiver-режим</b>\n",
         f"Статус: {status}",
     ]
     if enabled and dependents:
         lines.append(f"Подопечные ({dep_count} из {MAX_DEPENDENTS}):")
         for d in dependents:
-            lines.append(f"  • {escape_md(d['name'])}")
+            lines.append(f"  • {escape_html(d['name'])}")
     lines.append(
-        "\n_Позволяет отслеживать приём лекарств для близких. "
-        "При добавлении лекарства бот спросит «Для кого?»._"
+        "\n<i>Позволяет отслеживать приём лекарств для близких. "
+        "При добавлении лекарства бот спросит «Для кого?».</i>"
     )
     return "\n".join(lines)
 
@@ -50,7 +50,7 @@ async def handle_caregiver_settings(update: Update, context: ContextTypes.DEFAUL
     dependents = get_dependents(tid)
     await query.edit_message_text(
         _caregiver_text(enabled, dependents),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_caregiver_keyboard(enabled, dependents)
     )
 
@@ -66,7 +66,7 @@ async def handle_caregiver_toggle(update: Update, context: ContextTypes.DEFAULT_
     dependents = get_dependents(tid)
     await query.edit_message_text(
         _caregiver_text(enabled, dependents),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_caregiver_keyboard(enabled, dependents)
     )
 
@@ -106,8 +106,8 @@ async def handle_caregiver_add_name(update: Update, context: ContextTypes.DEFAUL
     enabled = get_caregiver_mode(tid)
     dependents = get_dependents(tid)
     await update.message.reply_text(
-        f"✅ Подопечный *{escape_md(name)}* добавлен.\n\n" + _caregiver_text(enabled, dependents),
-        parse_mode="Markdown",
+        f"✅ Подопечный <b>{escape_html(name)}</b> добавлен.\n\n" + _caregiver_text(enabled, dependents),
+        parse_mode="HTML",
         reply_markup=_caregiver_keyboard(enabled, dependents)
     )
     return ConversationHandler.END
@@ -133,9 +133,9 @@ async def handle_caregiver_delete_prompt(update: Update, context: ContextTypes.D
     if not dep:
         return
     await query.edit_message_text(
-        f"⚠️ Удалить подопечного *{escape_md(dep['name'])}*?\n\n"
+        f"⚠️ Удалить подопечного <b>{escape_html(dep['name'])}</b>?\n\n"
         f"Все их лекарства и история приёмов будут удалены.",
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Да, удалить", callback_data=f"caregiver:delete_confirm:{dep_id}"),
              InlineKeyboardButton("❌ Нет", callback_data="caregiver:delete_cancel")],
@@ -158,7 +158,7 @@ async def handle_caregiver_delete_confirm(update: Update, context: ContextTypes.
     dependents = get_dependents(tid)
     await query.edit_message_text(
         "✅ Подопечный удалён.\n\n" + _caregiver_text(enabled, dependents),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_caregiver_keyboard(enabled, dependents)
     )
 
@@ -173,7 +173,7 @@ async def handle_caregiver_delete_cancel(update: Update, context: ContextTypes.D
     dependents = get_dependents(tid)
     await query.edit_message_text(
         _caregiver_text(enabled, dependents),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_caregiver_keyboard(enabled, dependents)
     )
 
@@ -188,7 +188,7 @@ async def handle_caregiver_back(update: Update, context: ContextTypes.DEFAULT_TY
     tz, mode_label, presets, dp, caregiver_enabled = fetch_settings_data(user.id)
     await query.edit_message_text(
         _settings_text(tz, mode_label, presets, dp, caregiver_enabled),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, caregiver_enabled, user.id)
     )
 

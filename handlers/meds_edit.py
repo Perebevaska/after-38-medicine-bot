@@ -9,7 +9,7 @@ from scheduler import clear_pending_for_medication
 from constants import (EDIT_NAME, EDIT_DOSAGE, EDIT_DOSAGE_B, EDIT_FREQ_TYPE, EDIT_TIMES,
                        EDIT_MEAL, EDIT_FREQ_INTERVAL, EDIT_FREQ_WEEKDAYS, EDIT_FREQ_MONTHDAY,
                        TIMES, FREQ_TYPE, MEAL_LABELS, SLOT_ORDER)
-from utils import handle_db_errors, get_tz_for_user, escape_md, NAME_MAX_LEN, DOSAGE_MAX_LEN
+from utils import handle_db_errors, get_tz_for_user, escape_html, NAME_MAX_LEN, DOSAGE_MAX_LEN
 from handlers.meds_common import (
     _EDIT_NAME_KB, _EDIT_DOSAGE_KB, _EDIT_DOSAGE_B_KB,
     _EDIT_FREQ_INTERVAL_KB, _EDIT_FREQ_MONTHDAY_KB,
@@ -60,7 +60,7 @@ async def handle_pause_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE
     rules = get_rules_grouped_for_user(user_id).get(medication_id, [])
     await query.edit_message_text(
         _med_card_text(med, rules, today_local),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_med_card_keyboard(medication_id, bool(med["paused"]), with_menu=True),
     )
 
@@ -100,12 +100,12 @@ async def handle_edit_select(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             schedule_block = "⏰ " + " | ".join(_format_schedule_rule(r) for r in schedule_rules)
     await query.edit_message_text(
-        f"✏️ *Редактируем: {escape_md(med['name'])}*\n"
+        f"✏️ <b>Редактируем: {escape_html(med['name'])}</b>\n"
         f"💊 {dosage_display}  🍽 {MEAL_LABELS[med['meal_relation']]}\n"
         f"{schedule_block}\n"
         f"──────────────────\n"
-        f"📝 *Название* — введи новое:",
-        parse_mode="Markdown",
+        f"📝 <b>Название</b> — введи новое:",
+        parse_mode="HTML",
         reply_markup=_EDIT_NAME_KB
     )
     return EDIT_NAME
@@ -118,8 +118,8 @@ async def keep_edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["edit_name"] = med["name"]
     label = "Дозировка А" if context.user_data.get("edit_is_multi_dosage") else "Дозировка"
     await query.edit_message_text(
-        f"📏 *{label}* — введи новую\n(текущая: {escape_md(med['dosage'])}):",
-        parse_mode="Markdown",
+        f"📏 <b>{label}</b> — введи новую\n(текущая: {escape_html(med['dosage'])}):",
+        parse_mode="HTML",
         reply_markup=_EDIT_DOSAGE_KB
     )
     return EDIT_DOSAGE
@@ -134,8 +134,8 @@ async def edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     med = context.user_data["edit_med"]
     label = "Дозировка А" if context.user_data.get("edit_is_multi_dosage") else "Дозировка"
     await update.message.reply_text(
-        f"📏 *{label}* — введи новую\n(текущая: {escape_md(med['dosage'])}):",
-        parse_mode="Markdown",
+        f"📏 <b>{label}</b> — введи новую\n(текущая: {escape_html(med['dosage'])}):",
+        parse_mode="HTML",
         reply_markup=_EDIT_DOSAGE_KB
     )
     return EDIT_DOSAGE
@@ -164,11 +164,11 @@ async def edit_dosage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _show_edit_dosage_b_step(context, target, from_message: bool = False):
     rules = context.user_data["edit_med"]["schedule_rules"]
     current_b = next((r["dosage"] for r in rules if r.get("dosage")), "")
-    text = f"📏 *Дозировка Б* — введи новую\n(текущая: {escape_md(current_b)}):"
+    text = f"📏 <b>Дозировка Б</b> — введи новую\n(текущая: {escape_html(current_b)}):"
     if from_message:
-        await target.reply_text(text, parse_mode="Markdown", reply_markup=_EDIT_DOSAGE_B_KB)
+        await target.reply_text(text, parse_mode="HTML", reply_markup=_EDIT_DOSAGE_B_KB)
     else:
-        await target.edit_message_text(text, parse_mode="Markdown", reply_markup=_EDIT_DOSAGE_B_KB)
+        await target.edit_message_text(text, parse_mode="HTML", reply_markup=_EDIT_DOSAGE_B_KB)
     return EDIT_DOSAGE_B
 
 
@@ -194,9 +194,9 @@ async def _show_edit_meal_multi_step(context, target, from_message: bool = False
     current_label = MEAL_LABELS.get(edit_med["meal_relation"], edit_med["meal_relation"])
     kb = _edit_meal_keyboard_multi(current_label)
     if from_message:
-        await target.reply_text("🍽 *Приём с пищей* — выбери:", parse_mode="Markdown", reply_markup=kb)
+        await target.reply_text("🍽 <b>Приём с пищей</b> — выбери:", parse_mode="HTML", reply_markup=kb)
     else:
-        await target.edit_message_text("🍽 *Приём с пищей* — выбери:", parse_mode="Markdown", reply_markup=kb)
+        await target.edit_message_text("🍽 <b>Приём с пищей</b> — выбери:", parse_mode="HTML", reply_markup=kb)
     return EDIT_MEAL
 
 
@@ -220,18 +220,18 @@ async def _show_edit_freq_type_step(context, target, from_message: bool = False)
     is_multi = context.user_data.get("edit_is_multi_dosage")
     if is_multi:
         rule_lines = [
-            f"{_format_schedule_rule(r)} — {escape_md(r.get('dosage') or edit_med['dosage'])}"
+            f"{_format_schedule_rule(r)} — {escape_html(r.get('dosage') or edit_med['dosage'])}"
             for r in rules
         ]
-        text = "📅 *Расписание* (разная дозировка):\n" + "\n".join(rule_lines)
+        text = "📅 <b>Расписание</b> (разная дозировка):\n" + "\n".join(rule_lines)
         kb = _edit_freq_type_keyboard_multi()
     else:
-        text = f"📅 *Расписание* — выбери тип:\nТекущее: {_current_schedule_summary(rules)}"
+        text = f"📅 <b>Расписание</b> — выбери тип:\nТекущее: {_current_schedule_summary(rules)}"
         kb = _edit_freq_type_keyboard()
     if from_message:
-        await target.reply_text(text, parse_mode="Markdown", reply_markup=kb)
+        await target.reply_text(text, parse_mode="HTML", reply_markup=kb)
     else:
-        await target.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
+        await target.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
     return EDIT_FREQ_TYPE
 
 
@@ -291,8 +291,8 @@ async def choose_edit_freq_type(update: Update, context: ContextTypes.DEFAULT_TY
     preselected = {s for s in SLOT_ORDER if presets[s] in current_times}
     context.user_data["edit_selected_slots"] = preselected
     await query.edit_message_text(
-        "⏰ *Когда принимать?* — выбери один или несколько:\n\n_Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов._",
-        parse_mode="Markdown",
+        "⏰ <b>Когда принимать?</b> — выбери один или несколько:\n\n<i>Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов.</i>",
+        parse_mode="HTML",
         reply_markup=_edit_timeslots_keyboard(preselected, presets)
     )
     return EDIT_TIMES
@@ -339,22 +339,22 @@ async def _route_after_edit_meal(query, context):
         return ConversationHandler.END
 
     if freq == "interval":
-        await query.edit_message_text("🔄 *Через сколько дней?* (например: 2):",
-                                      parse_mode="Markdown", reply_markup=_EDIT_FREQ_INTERVAL_KB)
+        await query.edit_message_text("🔄 <b>Через сколько дней?</b> (например: 2):",
+                                      parse_mode="HTML", reply_markup=_EDIT_FREQ_INTERVAL_KB)
         return EDIT_FREQ_INTERVAL
 
     if freq == "weekdays":
         context.user_data["edit_freq_weekdays"] = set()
         await query.edit_message_text(
-            "📆 *Дни недели* — выбери и нажми Готово:",
-            parse_mode="Markdown",
+            "📆 <b>Дни недели</b> — выбери и нажми Готово:",
+            parse_mode="HTML",
             reply_markup=_edit_weekdays_keyboard(set())
         )
         return EDIT_FREQ_WEEKDAYS
 
     if freq == "monthly":
-        await query.edit_message_text("🗓 *Какого числа каждого месяца?* (1–31):",
-                                      parse_mode="Markdown", reply_markup=_EDIT_FREQ_MONTHDAY_KB)
+        await query.edit_message_text("🗓 <b>Какого числа каждого месяца?</b> (1–31):",
+                                      parse_mode="HTML", reply_markup=_EDIT_FREQ_MONTHDAY_KB)
         return EDIT_FREQ_MONTHDAY
 
     return ConversationHandler.END
@@ -385,8 +385,8 @@ async def edit_timeslots_confirm(update: Update, context: ContextTypes.DEFAULT_T
     edit_med = context.user_data["edit_med"]
     current_label = MEAL_LABELS.get(edit_med["meal_relation"], edit_med["meal_relation"])
     await query.edit_message_text(
-        "🍽 *Приём с пищей* — выбери:",
-        parse_mode="Markdown",
+        "🍽 <b>Приём с пищей</b> — выбери:",
+        parse_mode="HTML",
         reply_markup=_edit_meal_keyboard(current_label)
     )
     return EDIT_MEAL
@@ -494,8 +494,8 @@ async def handle_multi_edit_change_schedule(update: Update, context: ContextType
     presets = get_user_time_presets(update.effective_user.id)
     dosage_a = context.user_data["dosage"]
     await query.edit_message_text(
-        f"⏰ *Когда принимать дозировку А ({escape_md(dosage_a)})?*\nВыбери один или несколько:",
-        parse_mode="Markdown",
+        f"⏰ <b>Когда принимать дозировку А ({escape_html(dosage_a)})?</b>\nВыбери один или несколько:",
+        parse_mode="HTML",
         reply_markup=_timeslots_keyboard(set(), presets, back_cb="back_edit_to_freq_type")
     )
     return TIMES
@@ -508,8 +508,8 @@ async def back_edit_to_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     med = context.user_data["edit_med"]
     await query.edit_message_text(
-        f"✏️ *{escape_md(med['name'])}*\n──────────────────\n📝 *Название* — введи новое:",
-        parse_mode="Markdown",
+        f"✏️ <b>{escape_html(med['name'])}</b>\n──────────────────\n📝 <b>Название</b> — введи новое:",
+        parse_mode="HTML",
         reply_markup=_EDIT_NAME_KB
     )
     return EDIT_NAME
@@ -521,8 +521,8 @@ async def back_edit_to_dosage(update: Update, context: ContextTypes.DEFAULT_TYPE
     med = context.user_data["edit_med"]
     label = "Дозировка А" if context.user_data.get("edit_is_multi_dosage") else "Дозировка"
     await query.edit_message_text(
-        f"📏 *{label}* — введи новую\n(текущая: {escape_md(med['dosage'])}):",
-        parse_mode="Markdown",
+        f"📏 <b>{label}</b> — введи новую\n(текущая: {escape_html(med['dosage'])}):",
+        parse_mode="HTML",
         reply_markup=_EDIT_DOSAGE_KB
     )
     return EDIT_DOSAGE
@@ -540,8 +540,8 @@ async def back_edit_to_times(update: Update, context: ContextTypes.DEFAULT_TYPE)
     selected = context.user_data.get("edit_selected_slots", set())
     presets = get_user_time_presets(update.effective_user.id)
     await query.edit_message_text(
-        "⏰ *Когда принимать?* — выбери один или несколько:\n\n_Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов._",
-        parse_mode="Markdown",
+        "⏰ <b>Когда принимать?</b> — выбери один или несколько:\n\n<i>Время слотов меняется в ⚙️ Настройки → ⏰ Время приёмов.</i>",
+        parse_mode="HTML",
         reply_markup=_edit_timeslots_keyboard(selected, presets)
     )
     return EDIT_TIMES
@@ -562,5 +562,5 @@ async def back_edit_to_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = _edit_meal_keyboard_multi(current_label)
     else:
         kb = _edit_meal_keyboard(current_label)
-    await query.edit_message_text("🍽 *Приём с пищей* — выбери:", parse_mode="Markdown", reply_markup=kb)
+    await query.edit_message_text("🍽 <b>Приём с пищей</b> — выбери:", parse_mode="HTML", reply_markup=kb)
     return EDIT_MEAL

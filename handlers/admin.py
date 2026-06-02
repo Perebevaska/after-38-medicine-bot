@@ -20,14 +20,14 @@ async def handle_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     stats = get_admin_stats()
     text = (
-        f"🔧 *Админ панель*\n\n"
+        f"🔧 <b>Админ панель</b>\n\n"
         f"👥 Пользователей: {stats['total_users']}\n"
         f"💊 Активных лекарств: {stats['total_meds']}\n"
         f"📅 Активных сегодня: {stats['active_today']}"
     )
     await query.edit_message_text(
         text,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Назад", callback_data="admin:back")
         ]])
@@ -44,6 +44,6 @@ async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
     await query.edit_message_text(
         _settings_text(tz, mode_label, presets, dp, cg),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
     )

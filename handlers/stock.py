@@ -15,7 +15,7 @@ from database import (get_or_create_user, get_medication_by_id, get_schedules_by
                       set_medication_stock, add_medication_stock, set_units_per_dose,
                       set_low_stock_days, disable_stock_tracking)
 from schedule_utils import days_of_stock_left
-from utils import handle_db_errors, get_tz_for_user, escape_md
+from utils import handle_db_errors, get_tz_for_user, escape_html
 from constants import STOCK_INPUT
 
 logger = logging.getLogger(__name__)
@@ -28,12 +28,12 @@ def _num(x) -> str:
 
 def _stock_text(med, days_left) -> str:
     """Текст экрана запаса для лекарства med (row)."""
-    name = escape_md(med["name"])
+    name = escape_html(med["name"])
     if med["stock_qty"] is None:
         return (
-            f"📦 *Запас: {name}*\n\n"
+            f"📦 <b>Запас: {name}</b>\n\n"
             "Учёт запаса выключен.\n\n"
-            "_Укажи остаток — и бот предупредит, когда таблетки будут заканчиваться._"
+            "<i>Укажи остаток — и бот предупредит, когда таблетки будут заканчиваться.</i>"
         )
     qty = _num(med["stock_qty"])
     units = _num(med["units_per_dose"] or 1)
@@ -44,13 +44,13 @@ def _stock_text(med, days_left) -> str:
         left_line = "≥ 365 дн."
     else:
         left_line = f"~{days_left} дн."
-    warn = "\n\n⚠️ _Запас заканчивается — пора пополнить._" if (days_left is not None and days_left <= thr) else ""
+    warn = "\n\n⚠️ <i>Запас заканчивается — пора пополнить.</i>" if (days_left is not None and days_left <= thr) else ""
     return (
-        f"📦 *Запас: {name}*\n\n"
-        f"Остаток: *{qty}* шт.\n"
+        f"📦 <b>Запас: {name}</b>\n\n"
+        f"Остаток: <b>{qty}</b> шт.\n"
         f"Расход за приём: {units} шт.\n"
         f"Порог предупреждения: {thr} дн.\n"
-        f"Хватит примерно на: *{left_line}*{warn}"
+        f"Хватит примерно на: <b>{left_line}</b>{warn}"
     )
 
 
@@ -92,9 +92,9 @@ async def _render_stock(target, med_id: int, user, edit: bool):
     days_left = days_of_stock_left(rules, med["stock_qty"], med["units_per_dose"], today)
     text, kb = _stock_text(med, days_left), _stock_keyboard(med)
     if edit:
-        await target.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
+        await target.edit_message_text(text, parse_mode="HTML",reply_markup=kb)
     else:
-        await target.reply_text(text, parse_mode="Markdown", reply_markup=kb)
+        await target.reply_text(text, parse_mode="HTML",reply_markup=kb)
 
 
 @handle_db_errors
@@ -189,12 +189,12 @@ async def stock_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 today = datetime.now(get_tz_for_user(user.id)).date()
                 days_left = days_of_stock_left(rules, med["stock_qty"], med["units_per_dose"], today)
                 if days_left is not None and days_left <= med["low_stock_days"]:
-                    name = escape_md(med["name"])
+                    name = escape_html(med["name"])
                     qty = _num(med["stock_qty"])
                     await update.message.reply_text(
-                        f"⚠️ *{name}* скоро закончится: осталось примерно на {days_left} дн. ({qty} шт.).\n"
+                        f"⚠️ <b>{name}</b> скоро закончится: осталось примерно на {days_left} дн. ({qty} шт.).\n"
                         f"Не забудь пополнить запас 📦",
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
         except Exception as e:
             logger.error("Ошибка проверки порога запаса: %s", e)
