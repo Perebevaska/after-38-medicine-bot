@@ -65,9 +65,7 @@ jobs:
       - run: npm ci
       # Жёсткий гейт: tsc -b + vite build (ловит то, что иначе валит прод-деплой).
       - run: npm run build
-      # Lint — информационно (есть унаследованный долг set-state-in-effect).
       - run: npm run lint
-        continue-on-error: true
 
   # ── Сборка образа → ghcr.io (только main) ──────────────────────────────────
   build:

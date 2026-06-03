@@ -2124,6 +2124,11 @@
   color: #e6900a;
 }
 
+.caregiver-status-badge.active {
+  background: rgba(52, 199, 89, 0.15);
+  color: #1e9e3e;
+}
+
 .caregiver-request-row {
   gap: 6px;
   flex-wrap: wrap;
@@ -2282,4 +2287,194 @@
 .hint-error--inline { font-size: 13px; margin: 0; }
 .dep-input-error { margin: 4px 0 0; }
 .mlist-linked-add { padding: 4px 16px 12px; }
+.mlist-section-empty { padding: 0 16px 12px; margin: 0; font-size: 13px; }
 .mlist-add-btn--wide { width: 100%; border-radius: 8px; height: 36px; font-size: 0.9em; }
+
+/* F8: dep share */
+.dep-row-actions { display: flex; gap: 6px; align-items: center; }
+.btn-dep-share {
+  background: none;
+  border: 1px solid var(--hint);
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 8px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.btn-dep-share--active { opacity: 1; border-color: var(--link-color); }
+.btn-dep-share--notify { opacity: 1; border-color: #e6900a; }
+.dep-pending-row {
+  background: rgba(255, 165, 0, 0.07);
+  border-radius: 8px;
+  margin: 2px 0;
+  padding: 0 8px;
+}
+.dep-share-panel {
+  background: var(--secondary-bg);
+  border-radius: 8px;
+  margin: 2px 0 4px;
+  padding: 2px 0;
+}
+.dep-share-hint {
+  font-size: 12px;
+  color: var(--hint);
+  padding: 8px 14px 4px;
+  line-height: 1.45;
+  margin: 0;
+}
+.caregiver-block-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--hint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.caregiver-block-hint {
+  font-size: 12.5px;
+  line-height: 1.45;
+  flex: 1;
+}
+.caregiver-input-hint {
+  font-size: 12px;
+  color: var(--hint);
+  padding: 4px 14px 10px;
+  line-height: 1.5;
+  margin: 0;
+}
+.caregiver-input-hint--codes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 8px;
+}
+.caregiver-input-hint--codes b { color: var(--text); font-weight: 600; }
+
+/* ── Pending card (запросы заботы) ───────────────────────────────────────── */
+.settings-block--pending {
+  background: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: visible;
+}
+.pending-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 12px 12px;
+  background: var(--secondary-bg);
+  border: 1px solid color-mix(in srgb, var(--button-color) 35%, transparent);
+  border-left: 4px solid var(--button-color, #2ea6ff);
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.pending-card-icon {
+  flex-shrink: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+.pending-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.pending-card-user {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.pending-card-desc {
+  font-size: 12.5px;
+  color: var(--hint);
+  line-height: 1.35;
+}
+.pending-card-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+}
+.pending-card-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+.pending-card-btn:disabled { opacity: 0.5; cursor: default; }
+.pending-card-btn--accept {
+  background: var(--button-color, #2ea6ff);
+  color: #fff;
+}
+.pending-card-btn--decline {
+  background: rgba(0,0,0,0.06);
+  color: var(--hint);
+}
+
+/* ── Добавление близкого: две кнопки + раскрытие ─────────────────────────── */
+.caregiver-add-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.caregiver-add-btn {
+  flex: 1;
+  height: 38px;
+  border-radius: 9px;
+  border: none;
+  background: var(--button-color, #2ea6ff);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.caregiver-add-btn--ghost {
+  background: rgba(0,0,0,0.05);
+  color: var(--text);
+}
+.caregiver-add-expand {
+  padding: 8px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.caregiver-add-expand .caregiver-input-hint { padding: 0; }
+.caregiver-add-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.dep-code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.caregiver-add-btn-row {
+  display: flex;
+  gap: 8px;
+}
+.caregiver-add-cancel-btn,
+.caregiver-add-done-btn {
+  flex: 1;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+.caregiver-add-cancel-btn {
+  background: rgba(0,0,0,0.06);
+  color: var(--text);
+}
+.caregiver-add-done-btn {
+  background: var(--button-color, #2ea6ff);
+  color: #fff;
+}
+.caregiver-add-done-btn:disabled { opacity: 0.5; cursor: default; }

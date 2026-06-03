@@ -9,6 +9,8 @@ export interface TodayItem {
   dependent_name: string | null
   linked_user_id?: number
   linked_user_name?: string
+  dep_share_id?: number
+  dep_share_name?: string
 }
 
 export interface IntakeIn {
@@ -78,6 +80,8 @@ export interface Medication {
   rules: ScheduleRule[]
   linked_user_id?: number
   linked_user_name?: string
+  dep_share_id?: number
+  dep_share_name?: string
 }
 
 export interface StockInfo {
@@ -94,6 +98,7 @@ export interface MedicationIn {
   times_per_day: number
   dependent_id?: number | null
   for_linked_user_id?: number | null
+  for_dep_share_id?: number | null
   rules: RuleIn[]
 }
 
@@ -158,6 +163,28 @@ export interface UserSettings {
   active_caregiver: CaregiverLinkInfo | null
   active_dependents: CaregiverLinkInfo[]
   pending_sent: CaregiverLinkInfo[]
+  dep_shares: Record<string, DepShareInfo>
+  viewing_deps: ViewingDepInfo[]
+  pending_viewing_deps: PendingViewingDepInfo[]
+}
+
+export interface DepShareInfo {
+  share_code: string | null
+  active_viewer: { share_id: number; username: string } | null
+  pending_viewers: { share_id: number; username: string }[]
+}
+
+export interface ViewingDepInfo {
+  share_id: number
+  dep_id: number
+  dep_name: string
+  owner_username: string
+}
+
+export interface PendingViewingDepInfo {
+  share_id: number
+  dep_name: string
+  owner_username: string
 }
 
 export interface ServiceStatus {

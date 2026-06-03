@@ -90,6 +90,28 @@ async def get_settings(telegram_id: int = Depends(require_telegram_user)):
     result["active_caregiver"] = links["active_caregiver"]
     result["active_dependents"] = [l for l in links["as_caregiver"] if l["status"] == "active"]
     result["pending_sent"] = [l for l in links["as_caregiver"] if l["status"] == "pending"]
+    # F8: dep shares
+    dep_shares = await asyncio.to_thread(db.get_dep_shares_for_owner, telegram_id)
+    result["dep_shares"] = {str(k): v for k, v in dep_shares.items()}
+    viewing = await asyncio.to_thread(db.get_shared_deps_for_viewer, telegram_id)
+    result["viewing_deps"] = [
+        {
+            "share_id": s["share_id"],
+            "dep_id": s["dep_id"],
+            "dep_name": s["dep_name"],
+            "owner_username": s["owner_username"] or f"id{s['owner_telegram_id']}",
+        }
+        for s in viewing
+    ]
+    pending_viewing = await asyncio.to_thread(db.get_pending_viewing_deps, telegram_id)
+    result["pending_viewing_deps"] = [
+        {
+            "share_id": s["share_id"],
+            "dep_name": s["dep_name"],
+            "owner_username": s["owner_username"] or f"id{s['owner_telegram_id']}",
+        }
+        for s in pending_viewing
+    ]
     return result
 
 

@@ -145,11 +145,13 @@ function MedCard({
   entering,
   onTaken,
   onSkipped,
+  hideDep,
 }: {
   item: TodayItem
   entering?: boolean
   onTaken?: () => void
   onSkipped?: () => void
+  hideDep?: boolean
 }) {
   const { mutate, isPending } = useLogIntake()
 
@@ -178,7 +180,7 @@ function MedCard({
       <div className="mlist-info">
         <div className="mlist-name">
           {item.name}
-          {item.dependent_name && (
+          {!hideDep && item.dependent_name && (
             <span className="mlist-dep"> · {item.dependent_name}</span>
           )}
         </div>
@@ -219,14 +221,23 @@ export default function Dashboard() {
 
   const allItems = data ?? []
   // F7: separate own items from linked dependents' items
-  const ownItems = allItems.filter((i) => !i.linked_user_id)
-  const linkedItems = allItems.filter((i) => i.linked_user_id)
+  const ownItems = allItems.filter((i) => !i.linked_user_id && !i.dep_share_id)
+  const linkedItems = allItems.filter((i) => !!i.linked_user_id)
+  const sharedDepItems = allItems.filter((i) => !!i.dep_share_id)
 
   // Group linked items by linked_user_id
   const linkedGroups = linkedItems.reduce<Record<number, { name: string; items: TodayItem[] }>>((acc, item) => {
     const uid = item.linked_user_id!
     if (!acc[uid]) acc[uid] = { name: item.linked_user_name ?? `id${uid}`, items: [] }
     acc[uid].items.push(item)
+    return acc
+  }, {})
+
+  // F8: group shared dep items by dep_share_id
+  const sharedDepGroups = sharedDepItems.reduce<Record<number, { name: string; items: TodayItem[] }>>((acc, item) => {
+    const did = item.dep_share_id!
+    if (!acc[did]) acc[did] = { name: item.dep_share_name ?? `dep${did}`, items: [] }
+    acc[did].items.push(item)
     return acc
   }, {})
 
@@ -268,6 +279,7 @@ export default function Dashboard() {
 
   const hasAny = dueItems.length > 0 || otherItems.length > 0
   const hasLinked = linkedItems.length > 0
+  const hasSharedDeps = sharedDepItems.length > 0
 
   const showTzBanner = !tzBannerDismissed && settings?.timezone === 'UTC'
 
@@ -360,10 +372,37 @@ export default function Dashboard() {
                   </div>
                   <div className="mlist-schedule">{item.reminder_time}</div>
                 </div>
-                <span className="caregiver-status-icon">
-                  {item.status === 'taken' ? '✓' : item.status === 'skipped' ? '✗' : ''}
-                </span>
+                <div className="med-actions">
+                  {item.status === 'pending' ? (
+                    <>
+                      <button className="btn-take" disabled><Check size={18} strokeWidth={2.5} /></button>
+                      <button className="btn-skip" disabled><X size={18} strokeWidth={2.5} /></button>
+                    </>
+                  ) : (
+                    <button className="btn-undo" disabled>
+                      {item.status === 'taken' ? <Check size={18} strokeWidth={2.5} /> : <X size={18} strokeWidth={2.5} />}
+                    </button>
+                  )}
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* F8: shared local dependents — помощник №2 отмечает приёмы (CRUD-доступ) */}
+      {hasSharedDeps && Object.entries(sharedDepGroups).map(([did, group]) => (
+        <div key={did}>
+          <h2 className="section-title">{group.name}</h2>
+          <div className="mlist-list">
+            {group.items.map((item) => (
+              <MedCard
+                key={itemKey(item)}
+                item={item}
+                hideDep
+                onTaken={() => wishRef.current?.celebrate()}
+                onSkipped={() => wishRef.current?.skipped()}
+              />
             ))}
           </div>
         </div>

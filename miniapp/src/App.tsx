@@ -74,6 +74,7 @@ export default function App() {
   const [resetKeys, setResetKeys] = useState<ResetKeys>({ dashboard: 0, medications: 0, stats: 0, settings: 0 })
   const [editMedId, setEditMedId] = useState<number | undefined>()
   const [editLinkedUserId, setEditLinkedUserId] = useState<number | undefined>()
+  const [editForDepShareId, setEditForDepShareId] = useState<number | undefined>()
   const [showForm, setShowForm] = useState(false)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
 
@@ -112,9 +113,10 @@ export default function App() {
     if (dx > 0 && idx > 0) setNavPage(NAV_PAGES[idx - 1])
   }
 
-  const openForm = (editId?: number, linkedUserId?: number) => {
+  const openForm = (editId?: number, linkedUserId?: number, forDepShareId?: number) => {
     setEditMedId(editId)
     setEditLinkedUserId(linkedUserId)
+    setEditForDepShareId(forDepShareId)
     setShowForm(true)
   }
 
@@ -122,10 +124,11 @@ export default function App() {
     setShowForm(false)
     setEditMedId(undefined)
     setEditLinkedUserId(undefined)
+    setEditForDepShareId(undefined)
   }
 
   if (showForm) {
-    return <MedicationForm editId={editMedId} linkedUserId={editLinkedUserId} onBack={closeForm} />
+    return <MedicationForm editId={editMedId} linkedUserId={editLinkedUserId} forDepShareId={editForDepShareId} onBack={closeForm} />
   }
 
   const activeIdx = NAV_PAGES.indexOf(navPage)
@@ -141,7 +144,7 @@ export default function App() {
           >
             {page === 'dashboard' && <Dashboard key={resetKeys.dashboard} />}
             {page === 'medications' && (
-              <MedicationList key={resetKeys.medications} onAdd={(uid) => openForm(undefined, uid)} onEdit={(id, uid) => openForm(id, uid)} />
+              <MedicationList key={resetKeys.medications} onAdd={(uid, sid) => openForm(undefined, uid, sid)} onEdit={(id, uid, sid) => openForm(id, uid, sid)} />
             )}
             {page === 'stats' && <StatsPage key={resetKeys.stats} />}
             {page === 'settings' && <SettingsPage key={resetKeys.settings} />}

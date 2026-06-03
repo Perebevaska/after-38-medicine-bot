@@ -305,10 +305,11 @@ function RuleSection({ rule, index, errors, onChange }: RuleSectionProps) {
 interface Props {
   editId?: number
   linkedUserId?: number  // F7: create/edit for linked dependent (their user_id)
+  forDepShareId?: number // F8: create/edit for shared dep (share_id)
   onBack: () => void
 }
 
-export default function MedicationForm({ editId, linkedUserId, onBack }: Props) {
+export default function MedicationForm({ editId, linkedUserId, forDepShareId, onBack }: Props) {
   const { data: meds } = useMedications()
   const { data: deps } = useDependents()
   const { data: settings } = useSettings()
@@ -319,12 +320,23 @@ export default function MedicationForm({ editId, linkedUserId, onBack }: Props) 
   const existing = editId != null ? meds?.find((m) => m.id === editId) : undefined
   // F7-3.8: linked dependents available for "Для кого" dropdown
   const linkedDeps = settings?.active_dependents ?? []
+  // F8: shared deps (помогаю №2) available for "Для кого" dropdown
+  const viewingDeps = settings?.viewing_deps ?? []
 
-  // Effective linkedUserId: from prop, from existing med, or from dropdown selection
+  // Effective linkedUserId / depShareId: from prop, from existing med, or dropdown
   const [selectedLinkedUserId, setSelectedLinkedUserId] = useState<number | undefined>(
     linkedUserId ?? existing?.linked_user_id
   )
+  const [selectedDepShareId, setSelectedDepShareId] = useState<number | undefined>(
+    forDepShareId ?? existing?.dep_share_id
+  )
   const effectiveLinkedUserId = selectedLinkedUserId
+  const effectiveDepShareId = selectedDepShareId
+  // Контекст зафиксирован (редактирование или открыто для конкретного получателя) —
+  // прячем выбор «Для кого»; иначе (новое из «+») показываем полный список.
+  const recipientLocked = editId != null || linkedUserId != null || forDepShareId != null
+  const showRecipientPicker = !recipientLocked &&
+    ((deps?.length ?? 0) > 0 || linkedDeps.length > 0 || viewingDeps.length > 0)
 
   const [form, setForm] = useState<FormState>(() => {
     if (existing) {
@@ -353,6 +365,7 @@ export default function MedicationForm({ editId, linkedUserId, onBack }: Props) 
   // Re-initialize form when editing med loads after initial render
   useEffect(() => {
     if (existing && !form.name) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         name: existing.name,
         dosage: existing.dosage,
@@ -386,8 +399,9 @@ export default function MedicationForm({ editId, linkedUserId, onBack }: Props) 
       dosage: form.dosage.trim(),
       meal_relation: form.meal_relation,
       times_per_day: form.times_per_day,
-      dependent_id: effectiveLinkedUserId ? null : form.dependent_id,
+      dependent_id: (effectiveLinkedUserId || effectiveDepShareId) ? null : form.dependent_id,
       for_linked_user_id: effectiveLinkedUserId ?? null,
+      for_dep_share_id: effectiveDepShareId ?? null,
       rules: form.rules.map(ruleToIn),
     }
 
@@ -411,14 +425,14 @@ export default function MedicationForm({ editId, linkedUserId, onBack }: Props) 
         </button>
         <h1 className="form-title">
           {editId != null
-            ? effectiveLinkedUserId ? 'Редактировать (близкий)' : 'Редактировать'
-            : effectiveLinkedUserId ? 'Добавить близкому' : 'Добавить в аптечку'}
+            ? (effectiveLinkedUserId || effectiveDepShareId) ? 'Редактировать (близкий)' : 'Редактировать'
+            : (effectiveLinkedUserId || effectiveDepShareId) ? 'Добавить близкому' : 'Добавить в аптечку'}
         </h1>
       </div>
 
       <div className="form-body">
-        {/* Dependent / linked user selector */}
-        {!!settings?.caregiver_enabled && (deps && deps.length > 0 || linkedDeps.length > 0) && !effectiveLinkedUserId && (
+        {/* Единый выбор получателя: себе / локальный близкий / помогаю №1 / №2 */}
+        {showRecipientPicker && (
           <div className="form-section">
             <label className="field-label">Для кого</label>
             <select
@@ -426,25 +440,20 @@ export default function MedicationForm({ editId, linkedUserId, onBack }: Props) 
               value={
                 effectiveLinkedUserId != null
                   ? `linked:${effectiveLinkedUserId}`
+                  : effectiveDepShareId != null
+                  ? `share:${effectiveDepShareId}`
                   : form.dependent_id != null
                   ? `dep:${form.dependent_id}`
                   : ''
               }
               onChange={(e) => {
                 const v = e.target.value
-                if (!v) {
-                  setForm((f) => ({ ...f, dependent_id: null }))
-                  setSelectedLinkedUserId(undefined)
-                } else if (v.startsWith('dep:')) {
-                  setForm((f) => ({ ...f, dependent_id: +v.slice(4) }))
-                  setSelectedLinkedUserId(undefined)
-                } else if (v.startsWith('linked:')) {
-                  setForm((f) => ({ ...f, dependent_id: null }))
-                  setSelectedLinkedUserId(+v.slice(7))
-                }
+                setForm((f) => ({ ...f, dependent_id: v.startsWith('dep:') ? +v.slice(4) : null }))
+                setSelectedLinkedUserId(v.startsWith('linked:') ? +v.slice(7) : undefined)
+                setSelectedDepShareId(v.startsWith('share:') ? +v.slice(6) : undefined)
               }}
             >
-              <option value="">Для себя</option>
+              <option value="">Себе</option>
               {deps?.map((d) => (
                 <option key={`dep:${d.id}`} value={`dep:${d.id}`}>
                   {d.name}
@@ -453,6 +462,11 @@ export default function MedicationForm({ editId, linkedUserId, onBack }: Props) 
               {linkedDeps.map((d) => (
                 <option key={`linked:${d.dependent_user_id}`} value={`linked:${d.dependent_user_id}`}>
                   @{d.dependent_username ?? `id${d.dependent_telegram_id}`}
+                </option>
+              ))}
+              {viewingDeps.map((vd) => (
+                <option key={`share:${vd.share_id}`} value={`share:${vd.share_id}`}>
+                  {vd.dep_name} · @{vd.owner_username}
                 </option>
               ))}
             </select>

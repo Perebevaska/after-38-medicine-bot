@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, getInitDataRaw } from './client'
-import type { TodayItem, IntakeIn, AdherenceResponse, StreakItem, Medication, MedicationIn, Dependent, StockInfo, UserSettings, WeekStatRow, AdminStats } from './types'
+import type { TodayItem, IntakeIn, AdherenceResponse, StreakItem, Medication, MedicationIn, Dependent, StockInfo, UserSettings, WeekStatRow, AdminStats, DepShareInfo } from './types'
 
 export function useRequestCaregiverLink() {
   const qc = useQueryClient()
@@ -334,6 +334,74 @@ export function useAdminStats(enabled: boolean) {
     queryFn: () => api.get<AdminStats>('/admin/stats'),
     enabled: enabled && !!getInitDataRaw(),
     refetchInterval: 30_000,
+  })
+}
+
+// ── F8: dep shares ───────────────────────────────────────────────────────────
+
+export function useEnsureDepShareCode() {
+  const qc = useQueryClient()
+  return useMutation<DepShareInfo, Error, number>({
+    mutationFn: (depId) => api.post<{ share_code: string }>(`/dependent-shares/${depId}/code`)
+      .then((r) => ({ share_code: r.share_code, active_viewer: null, pending_viewers: [] })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+export function useJoinDepShare() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, string>({
+    mutationFn: (code) => api.post<void>('/dependent-shares/join', { code }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      qc.invalidateQueries({ queryKey: ['today'] })
+    },
+  })
+}
+
+export function useConfirmDepShare() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, number>({
+    mutationFn: (shareId) => api.post<void>(`/dependent-shares/${shareId}/confirm`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      qc.invalidateQueries({ queryKey: ['medications'] })
+      qc.invalidateQueries({ queryKey: ['today'] })
+    },
+  })
+}
+
+export function useDeclineDepShare() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, number>({
+    mutationFn: (shareId) => api.post<void>(`/dependent-shares/${shareId}/decline`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+export function useRevokeDepShare() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, number>({
+    mutationFn: (shareId) => api.delete<void>(`/dependent-shares/${shareId}`),
+    onSuccess: () => {
+      // revoke = передача владения viewer'у: меняются и dependents, и medications
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      qc.invalidateQueries({ queryKey: ['dependents'] })
+      qc.invalidateQueries({ queryKey: ['medications'] })
+      qc.invalidateQueries({ queryKey: ['today'] })
+    },
+  })
+}
+
+export function useLeaveDepShare() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, number>({
+    mutationFn: (shareId) => api.delete<void>(`/dependent-shares/${shareId}/leave`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      qc.invalidateQueries({ queryKey: ['medications'] })
+      qc.invalidateQueries({ queryKey: ['today'] })
+    },
   })
 }
 

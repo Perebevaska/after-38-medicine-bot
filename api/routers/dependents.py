@@ -39,6 +39,8 @@ async def create_dependent(body: DependentIn, telegram_id: int = Depends(require
 
 @router.delete("/{dep_id}", status_code=204)
 async def delete_dependent(dep_id: int, telegram_id: int = Depends(require_telegram_user)):
-    med_ids = await asyncio.to_thread(db.delete_dependent, telegram_id, dep_id)
-    if med_ids is None:
-        raise HTTPException(404, "Близкий не найден")
+    # F8: if dep has active viewer, transfer ownership instead of deleting
+    transferred = await asyncio.to_thread(db.transfer_dep_to_viewer, telegram_id, dep_id)
+    if transferred:
+        return
+    await asyncio.to_thread(db.delete_dependent, telegram_id, dep_id)

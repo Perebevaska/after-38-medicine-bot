@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Pencil, Pause, Play, Package, Trash2, Plus } from 'lucide-react'
-import { useMedications, useDeleteMedication, usePauseMedication } from '../api/hooks'
+import { useMedications, useDeleteMedication, usePauseMedication, useSettings } from '../api/hooks'
 import { apiErrorMessage } from '../api/client'
 import type { Medication } from '../api/types'
 import { StockExpanded } from './StockPage'
@@ -40,13 +40,6 @@ function MedCard({
   const { mutate: pause, isPending: pausePending } = usePauseMedication()
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }, [])
-
-  useEffect(() => {
-    if (forceClose && isOpen) close()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forceClose])
-
   const open = () => { setView('actions'); setIsOpen(true); onOpen() }
   const close = () => {
     setIsOpen(false)
@@ -54,6 +47,14 @@ function MedCard({
     closeTimerRef.current = setTimeout(() => setView('collapsed'), CLOSE_MS)
   }
   const toggle = () => (isOpen ? close() : open())
+
+  useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (forceClose && isOpen) close()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceClose])
 
   const handlePause = () => {
     pause({ id: med.id, paused: !med.paused }, { onSuccess: close })
@@ -160,15 +161,16 @@ function MedCard({
 }
 
 interface Props {
-  onAdd: (linkedUserId?: number) => void
-  onEdit: (id: number, linkedUserId?: number) => void
+  onAdd: (linkedUserId?: number, forDepShareId?: number) => void
+  onEdit: (id: number, linkedUserId?: number, forDepShareId?: number) => void
 }
 
 export default function MedicationList({ onAdd, onEdit }: Props) {
   const { data, isLoading, error } = useMedications()
+  const { data: settings } = useSettings()
   const [openMedId, setOpenMedId] = useState<number | null>(null)
 
-  const ownMeds = data?.filter((m) => !m.linked_user_id) ?? []
+  const ownMeds = data?.filter((m) => !m.linked_user_id && !m.dep_share_id) ?? []
   // F7: group linked deps' meds by linked_user_id
   const linkedGroups = (data ?? [])
     .filter((m) => m.linked_user_id)
@@ -178,7 +180,17 @@ export default function MedicationList({ onAdd, onEdit }: Props) {
       acc[uid].meds.push(m)
       return acc
     }, {})
-  const hasAny = ownMeds.length > 0 || Object.keys(linkedGroups).length > 0
+  // F8: shared dep sections — from viewing_deps (always show even if no meds yet)
+  const viewingDeps = settings?.viewing_deps ?? []
+  const sharedDepMedMap = (data ?? [])
+    .filter((m) => m.dep_share_id)
+    .reduce<Record<number, Medication[]>>((acc, m) => {
+      const sid = m.dep_share_id!
+      if (!acc[sid]) acc[sid] = []
+      acc[sid].push(m)
+      return acc
+    }, {})
+  const hasAny = ownMeds.length > 0 || Object.keys(linkedGroups).length > 0 || viewingDeps.length > 0
 
   return (
     <div className="page">
@@ -230,17 +242,33 @@ export default function MedicationList({ onAdd, onEdit }: Props) {
               />
             ))}
           </div>
-          <div className="mlist-linked-add">
-            <button
-              className="mlist-add-btn mlist-add-btn--wide"
-              onClick={() => onAdd(group.meds[0]?.linked_user_id)}
-              title="Добавить лекарство близкому"
-            >
-              <Plus size={16} strokeWidth={2} /> Добавить
-            </button>
-          </div>
         </div>
       ))}
+
+      {/* F8: shared dep sections (viewer has full CRUD) — always shown even if no meds */}
+      {viewingDeps.map((vd) => {
+        const meds = sharedDepMedMap[vd.share_id] ?? []
+        return (
+          <div key={vd.share_id}>
+            <h2 className="section-title">{vd.dep_name}</h2>
+            {meds.length > 0 ? (
+              <div className="mlist-list">
+                {meds.map((med) => (
+                  <MedCard
+                    key={med.id}
+                    med={med}
+                    onEdit={(id) => onEdit(id, undefined, vd.share_id)}
+                    onOpen={() => setOpenMedId(med.id)}
+                    forceClose={openMedId !== null && openMedId !== med.id}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="hint mlist-section-empty">Нет лекарств. Добавьте через «+» сверху.</p>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

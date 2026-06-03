@@ -93,6 +93,7 @@ class MedicationIn(BaseModel):
     times_per_day: int = Field(ge=1, le=24)
     dependent_id: Optional[int] = None
     for_linked_user_id: Optional[int] = None  # F7: user_id linked dependent
+    for_dep_share_id: Optional[int] = None    # F8: share_id viewer → shared dep
     rules: list[RuleIn] = Field(min_length=1, max_length=MAX_RULES_PER_MED)
 
 
@@ -117,19 +118,43 @@ async def list_medications(user: TelegramUser = Depends(require_db_user)):
         dep_rules = await asyncio.to_thread(db.get_rules_grouped_for_user, dep_uid)
         dep_name = dep["username"] or f"id{dep['telegram_id']}"
         for m in dep_meds:
+            # F7-fix: помощник видит только собственные лекарства подопечного,
+            # НЕ его локальных близких (dependent_id IS NULL).
+            if m["dependent_id"] is not None:
+                continue
             result.append({
                 **dict(m),
                 "rules": [dict(r) for r in dep_rules.get(m["id"], [])],
                 "linked_user_id": dep_uid,
                 "linked_user_name": dep_name,
             })
+    # F8: include shared deps' medications (viewer has CRUD access)
+    viewer_deps = await asyncio.to_thread(db.get_viewer_shared_deps, user.user_id)
+    for vd in viewer_deps:
+        dep_meds = await asyncio.to_thread(db.get_medications_for_dep, vd["dep_id"])
+        dep_rules = await asyncio.to_thread(db.get_rules_grouped_for_dep, vd["dep_id"])
+        for m in dep_meds:
+            result.append({
+                **dict(m),
+                "rules": [dict(r) for r in dep_rules.get(m["id"], [])],
+                "dep_share_id": vd["share_id"],
+                "dep_share_name": vd["dep_name"],
+            })
     return result
 
 
 @router.post("", status_code=201)
 async def create_medication(body: MedicationIn, user: TelegramUser = Depends(require_db_user)):
+    # F8: creating med for a shared (viewer) dep
+    if body.for_dep_share_id is not None:
+        viewer_deps = await asyncio.to_thread(db.get_viewer_shared_deps, user.user_id)
+        vd = next((d for d in viewer_deps if d["share_id"] == body.for_dep_share_id), None)
+        if not vd:
+            raise HTTPException(403, "Нет активного доступа к этому близкому")
+        target_user_id = vd["owner_user_id"]
+        dep_id = vd["dep_id"]
     # F7: creating med for a linked dependent
-    if body.for_linked_user_id is not None:
+    elif body.for_linked_user_id is not None:
         ok = await asyncio.to_thread(
             db.is_caregiver_for_user_id, user.telegram_id, body.for_linked_user_id
         )
@@ -162,13 +187,20 @@ async def create_medication(body: MedicationIn, user: TelegramUser = Depends(req
 
 
 async def _resolve_med(med_id: int, user: TelegramUser):
-    """Returns (med_row, owner_user_id). Allows caregiver to manage linked dep's meds."""
+    """Returns med_row. Allows caregiver (F7) and viewer of shared dep (F8) to manage meds."""
     linked = await asyncio.to_thread(db.get_linked_dependents_for_caregiver, user.telegram_id)
     allowed_ids = [user.user_id] + [d["user_id"] for d in linked]
     med = await asyncio.to_thread(db.get_medication_by_id_any_user, med_id, allowed_ids)
-    if not med:
-        raise HTTPException(404, "Лекарство не найдено")
-    return med
+    if med:
+        return med
+    # F8: check if med belongs to a shared dep the user is viewing
+    viewer_deps = await asyncio.to_thread(db.get_viewer_shared_deps, user.user_id)
+    if viewer_deps:
+        viewer_dep_ids = {vd["dep_id"] for vd in viewer_deps}
+        med = await asyncio.to_thread(db.get_medication_by_id_raw, med_id)
+        if med and med.get("dependent_id") in viewer_dep_ids:
+            return med
+    raise HTTPException(404, "Лекарство не найдено")
 
 
 @router.put("/{med_id}")

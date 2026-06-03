@@ -16,7 +16,11 @@ class IntakeIn(BaseModel):
     status: str   # "taken" | "skipped" | "pending" (undo)
 
 
-def _build_today_items(rows, statuses, today, now_min, *, linked_user_id=None, linked_user_name=None):
+def _build_today_items(
+    rows, statuses, today, now_min, *,
+    linked_user_id=None, linked_user_name=None,
+    dep_share_id=None, dep_share_name=None,
+):
     items = []
     for row in rows:
         if not _rule_fires_today(row, today):
@@ -42,6 +46,9 @@ def _build_today_items(rows, statuses, today, now_min, *, linked_user_id=None, l
         if linked_user_id is not None:
             item["linked_user_id"] = linked_user_id
             item["linked_user_name"] = linked_user_name
+        if dep_share_id is not None:
+            item["dep_share_id"] = dep_share_id
+            item["dep_share_name"] = dep_share_name
         items.append(item)
     return items
 
@@ -69,7 +76,8 @@ async def get_today(telegram_id: int = Depends(require_telegram_user)):
         dep_statuses = await asyncio.to_thread(
             db.get_today_intake_statuses, dep_tid, dep_start, dep_end
         )
-        dep_rows = await asyncio.to_thread(db.get_schedules_for_user, dep_tid)
+        # F7-fix: только собственные лекарства подопечного, без его локальных близких
+        dep_rows = await asyncio.to_thread(db.get_own_schedules_for_user, dep_tid)
         dep_today = dep_local.date()
         dep_now_min = dep_local.hour * 60 + dep_local.minute
         dep_name = dep["username"] or f"id{dep_tid}"
@@ -77,16 +85,48 @@ async def get_today(telegram_id: int = Depends(require_telegram_user)):
             dep_rows, dep_statuses, dep_today, dep_now_min,
             linked_user_id=dep["user_id"], linked_user_name=dep_name,
         ))
+    # F8: append shared local dependents' today (read-only for viewer)
+    shared_deps = await asyncio.to_thread(db.get_shared_deps_for_viewer, telegram_id)
+    for sdep in shared_deps:
+        dep_rows = await asyncio.to_thread(db.get_schedules_for_dependent, sdep["dep_id"])
+        if not dep_rows:
+            continue
+        owner_tz = await asyncio.to_thread(get_tz_for_user, sdep["owner_telegram_id"])
+        owner_local = datetime.now(owner_tz)
+        owner_start, owner_end = local_day_bounds_utc(owner_tz, owner_local)
+        dep_statuses = await asyncio.to_thread(
+            db.get_today_intake_statuses_for_dep, sdep["dep_id"], owner_start, owner_end
+        )
+        owner_today = owner_local.date()
+        owner_now_min = owner_local.hour * 60 + owner_local.minute
+        items.extend(_build_today_items(
+            dep_rows, dep_statuses, owner_today, owner_now_min,
+            dep_share_id=sdep["dep_id"], dep_share_name=sdep["dep_name"],
+        ))
     return sorted(items, key=lambda x: x["reminder_time"], reverse=True)
 
 
 @router.post("/intake", status_code=204)
 async def log_intake(body: IntakeIn, user: TelegramUser = Depends(require_db_user)):
-    if not await asyncio.to_thread(db.get_medication_by_id, body.medication_id, user.user_id):
+    med = await asyncio.to_thread(db.get_medication_by_id_raw, body.medication_id)
+    owner_user_id = med["user_id"] if med else None
+    if not med:
         raise HTTPException(404, "Лекарство не найдено")
-    user_tz = await asyncio.to_thread(get_tz_for_user, user.telegram_id)
-    now_local = datetime.now(user_tz)
-    start_utc, end_utc = local_day_bounds_utc(user_tz, now_local)
+    # Доступ: собственное лекарство ИЛИ лекарство shared-близкого (помощник №2
+    # отмечает приём за локального близкого — у того нет своего аккаунта).
+    if owner_user_id != user.user_id:
+        viewer_deps = await asyncio.to_thread(db.get_viewer_shared_deps, user.user_id)
+        viewer_dep_ids = {vd["dep_id"] for vd in viewer_deps}
+        if med.get("dependent_id") not in viewer_dep_ids:
+            raise HTTPException(404, "Лекарство не найдено")
+    # День считаем в TZ владельца лекарства (расписание строится в его TZ).
+    owner_tid = (
+        user.telegram_id if owner_user_id == user.user_id
+        else await asyncio.to_thread(db.get_telegram_id_by_user_id, owner_user_id)
+    )
+    owner_tz = await asyncio.to_thread(get_tz_for_user, owner_tid)
+    now_local = datetime.now(owner_tz)
+    start_utc, end_utc = local_day_bounds_utc(owner_tz, now_local)
     old_status = await asyncio.to_thread(
         db.log_intake, body.medication_id, body.scheduled_time,
         body.status, start_utc, end_utc,
@@ -94,7 +134,11 @@ async def log_intake(body: IntakeIn, user: TelegramUser = Depends(require_db_use
     await asyncio.to_thread(
         db.apply_intake_stock, body.medication_id, body.status, old_status
     )
-    # G1: сердечки — +1 taken / −1 skipped (идемпотентно через old_status).
-    await asyncio.to_thread(
-        db.apply_intake_hearts, user.user_id, body.status, old_status
-    )
+    # G1: сердечки начисляются ВСЕМ в связке — владельцу + всем активным
+    # помощникам локального близкого (общая забота = общая награда).
+    heart_user_ids = {owner_user_id}
+    if med.get("dependent_id") is not None:
+        viewers = await asyncio.to_thread(db.get_dep_share_viewer_ids, med["dependent_id"])
+        heart_user_ids.update(viewers)
+    for uid in heart_user_ids:
+        await asyncio.to_thread(db.apply_intake_hearts, uid, body.status, old_status)

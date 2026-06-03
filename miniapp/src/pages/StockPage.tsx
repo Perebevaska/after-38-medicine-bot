@@ -39,11 +39,13 @@ export function StockExpanded({ med }: { med: Medication }) {
   useEffect(() => {
     if (!data || initialized.current) return
     initialized.current = true
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (data.stock_qty !== null && data.stock_qty !== undefined) {
       setStockQty(String(data.stock_qty))
     }
     setUnitsVal(String(data.units_per_dose ?? 1))
     setThreshVal(String(data.low_stock_days ?? 5))
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [data])
 
   if (isLoading) return <p className="stock-loading">Загрузка…</p>

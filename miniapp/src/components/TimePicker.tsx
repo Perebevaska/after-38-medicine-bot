@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 // ─── DrumPicker ──────────────────────────────────────────────────────────────
 // Общий компонент выбора времени (барабан HH:MM). Используется в форме
@@ -16,13 +16,12 @@ function DrumColumn({ items, value, onChange }: {
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const fromScroll = useRef(false)
-  const [selIdx, setSelIdx] = useState(() => Math.max(0, items.indexOf(value)))
+  const selIdx = Math.max(0, items.indexOf(value))
 
   useEffect(() => {
     if (fromScroll.current) { fromScroll.current = false; return }
     const idx = items.indexOf(value)
     if (idx < 0) return
-    setSelIdx(idx)
     const el = ref.current
     if (!el) return
     const top = idx * DRUM_ITEM_H
@@ -36,7 +35,6 @@ function DrumColumn({ items, value, onChange }: {
       items.length - 1,
       Math.round(ref.current.scrollTop / DRUM_ITEM_H)
     ))
-    setSelIdx(idx)
     if (items[idx] !== value) {
       fromScroll.current = true
       onChange(items[idx])

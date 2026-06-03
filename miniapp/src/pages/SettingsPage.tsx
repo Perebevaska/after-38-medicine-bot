@@ -6,6 +6,8 @@ import {
   useAdminStats, useRequestCaregiverLink, useConfirmCaregiverLink,
   useDeclineCaregiverLink, useDeleteCaregiverLink, useRequestLinkBreak,
   useSetDependentReminderMode, useSetDependentStrictMode,
+  useEnsureDepShareCode, useJoinDepShare, useConfirmDepShare, useDeclineDepShare,
+  useRevokeDepShare, useLeaveDepShare,
 } from '../api/hooks'
 import TimePicker from '../components/TimePicker'
 
@@ -25,6 +27,30 @@ function InfoTip({ text }: { text: string }) {
       ⓘ
       {open && <span className="info-tip-popup">{text}</span>}
     </span>
+  )
+}
+
+function PendingCard({
+  user, desc, onAccept, onDecline, busy,
+}: {
+  user: string
+  desc: string
+  onAccept: () => void
+  onDecline: () => void
+  busy?: boolean
+}) {
+  return (
+    <div className="pending-card">
+      <span className="pending-card-icon">👤</span>
+      <div className="pending-card-body">
+        <span className="pending-card-user">{user}</span>
+        <span className="pending-card-desc">{desc}</span>
+      </div>
+      <div className="pending-card-actions">
+        <button className="pending-card-btn pending-card-btn--accept" title="Принять" onClick={onAccept} disabled={busy}>✓</button>
+        <button className="pending-card-btn pending-card-btn--decline" title="Отклонить" onClick={onDecline} disabled={busy}>✕</button>
+      </div>
+    </div>
   )
 }
 
@@ -105,8 +131,10 @@ export default function SettingsPage() {
   const [strictTimeOpen, setStrictTimeOpen] = useState(false)
   const [repeatTime, setRepeatTime] = useState('02:00')
   const [repeatTimeOpen, setRepeatTimeOpen] = useState(false)
-  const [newDepInput, setNewDepInput] = useState('')
-  const [depInputError, setDepInputError] = useState('')
+  const [addMode, setAddMode] = useState<'none' | 'name' | 'code'>('none')
+  const [nameInput, setNameInput] = useState('')
+  const [codeInput, setCodeInput] = useState('')
+  const [addError, setAddError] = useState('')
   const [caregiverOffConfirm, setCaregiverOffConfirm] = useState(false)
   const [tzEditing, setTzEditing] = useState(false)
   const [tzSearch, setTzSearch] = useState('')
@@ -132,6 +160,18 @@ export default function SettingsPage() {
   const [codeCopied, setCodeCopied] = useState(false)
   const [detachConfirmId, setDetachConfirmId] = useState<number | null>(null)
 
+  // F8: dep shares
+  const ensureDepShareCode = useEnsureDepShareCode()
+  const joinDepShare = useJoinDepShare()
+  const confirmDepShare = useConfirmDepShare()
+  const declineDepShare = useDeclineDepShare()
+  const revokeDepShare = useRevokeDepShare()
+  const leaveDepShare = useLeaveDepShare()
+  const [shareOpenId, setShareOpenId] = useState<number | null>(null)
+  const [shareCopiedId, setShareCopiedId] = useState<number | null>(null)
+  const [leaveConfirmId, setLeaveConfirmId] = useState<number | null>(null)
+  const [shareCodeError, setShareCodeError] = useState<Record<number, boolean>>({})
+
   const handleCopyCode = () => {
     if (!data?.caregiver_code) return
     const code = data.caregiver_code
@@ -139,24 +179,62 @@ export default function SettingsPage() {
     setCodeCopied(true)
     setTimeout(() => setCodeCopied(false), 2000)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tg = (window as any).Telegram?.WebApp
       tg?.openTelegramLink?.(`https://t.me/share/url?url=${encodeURIComponent(code)}&text=${encodeURIComponent('Мой код для подключения помощника: ' + code)}`)
-    } catch {}
+    } catch { /* noop */ }
   }
 
-  const handleAddDepOrLink = () => {
-    const val = newDepInput.trim()
+  const resetAdd = () => {
+    setAddMode('none'); setNameInput(''); setCodeInput(''); setAddError('')
+  }
+
+  const handleAddName = () => {
+    const val = nameInput.trim()
     if (!val) return
-    setDepInputError('')
-    if (/^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(val)) {
-      requestLink.mutate(val.toUpperCase(), {
-        onSuccess: () => setNewDepInput(''),
-        onError: (e) => setDepInputError((e as any).message),
+    setAddError('')
+    createDep.mutate(val, {
+      onSuccess: resetAdd,
+      onError: (e) => setAddError((e as Error).message),
+    })
+  }
+
+  const handleAddCode = () => {
+    const val = codeInput.trim().toUpperCase()
+    if (!val) return
+    setAddError('')
+    if (/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(val)) {
+      joinDepShare.mutate(val, {
+        onSuccess: resetAdd,
+        onError: (e) => setAddError((e as Error).message),
+      })
+    } else if (/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(val)) {
+      requestLink.mutate(val, {
+        onSuccess: resetAdd,
+        onError: (e) => setAddError((e as Error).message),
       })
     } else {
-      createDep.mutate(val, {
-        onSuccess: () => setNewDepInput(''),
-        onError: (e) => setDepInputError((e as any).message),
+      setAddError('Код в формате XXXX-XXXX или XXXX-XXXX-XXXX')
+    }
+  }
+
+  const handleCopyDepShareCode = (depId: number, code: string) => {
+    navigator.clipboard.writeText(code).catch(() => {})
+    setShareCopiedId(depId)
+    setTimeout(() => setShareCopiedId(null), 2000)
+  }
+
+  const handleToggleShare = (depId: number) => {
+    if (shareOpenId === depId) {
+      setShareOpenId(null)
+      return
+    }
+    setShareOpenId(depId)
+    const existing = data?.dep_shares?.[String(depId)]
+    if (!existing?.share_code) {
+      setShareCodeError((p) => ({ ...p, [depId]: false }))
+      ensureDepShareCode.mutate(depId, {
+        onError: () => setShareCodeError((p) => ({ ...p, [depId]: true })),
       })
     }
   }
@@ -202,6 +280,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!data) return
+    /* eslint-disable react-hooks/set-state-in-effect */
     setDailyPlanTime(data.daily_plan_time ?? '08:00')
     setStrictTime(toTime(data.strict_mode_hours ?? 2, data.strict_mode_minutes ?? 0))
     setRepeatTime(toTime(data.reminder_repeat_hours ?? 2, data.reminder_repeat_minutes ?? 0))
@@ -213,6 +292,7 @@ export default function SettingsPage() {
     })
     setDepRepeatTimes(rt)
     setDepStrictTimes(st)
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [data])
 
   if (isLoading) return <div className="page"><p className="hint">Загрузка…</p></div>
@@ -228,6 +308,12 @@ export default function SettingsPage() {
 
   // F7-3.1: подопечный не может менять повтор и строгий режим
   const isDependent = !!data.active_caregiver
+
+  // Все входящие запросы заботы — собраны в один блок «Запросы» сверху
+  const caregiverReqs = data.pending_requests ?? []
+  const depShareReqs = (deps ?? []).flatMap((d) =>
+    (data.dep_shares?.[String(d.id)]?.pending_viewers ?? []).map((v) => ({ ...v, depName: d.name }))
+  )
 
   return (
     <div className="page">
@@ -439,48 +525,45 @@ export default function SettingsPage() {
 
       <h2 className="section-title">Забота</h2>
       <p className="section-hint">
-        Позволяет близкому человеку следить за приёмами и управлять аптечкой.
+        Следите за приёмами близких и управляйте их аптечкой прямо из приложения. Другой пользователь бота может стать вашим помощником или взять заботу о конкретном близком.
       </p>
 
       {isDependent ? (
         /* ── Вид подопечного ── */
         <>
-          {/* Входящие запросы */}
           {data.pending_requests && data.pending_requests.length > 0 && (
-            <div className="settings-block">
+            <div className="settings-block settings-block--pending">
               {data.pending_requests.map((req) => (
-                <div key={req.id} className="settings-row caregiver-request-row">
-                  <span className="settings-label">
-                    Запрос от @{req.caregiver_username ?? `id${req.caregiver_telegram_id}`}
-                  </span>
-                  <button className="dep-add-btn" onClick={() => confirmLink.mutate(req.id)} disabled={confirmLink.isPending}>
-                    Принять
-                  </button>
-                  <button className="dep-delete-btn" onClick={() => declineLink.mutate(req.id)} disabled={declineLink.isPending}>
-                    Отклонить
-                  </button>
-                </div>
+                <PendingCard
+                  key={req.id}
+                  user={`@${req.caregiver_username ?? `id${req.caregiver_telegram_id}`}`}
+                  desc="хочет стать вашим помощником"
+                  onAccept={() => confirmLink.mutate(req.id)}
+                  onDecline={() => declineLink.mutate(req.id)}
+                  busy={confirmLink.isPending || declineLink.isPending}
+                />
               ))}
             </div>
           )}
           <div className="settings-block">
-            {/* Режим заботы — заблокирован, ПЕРВЫМ */}
             <div className="settings-row">
               <span className="settings-label">Режим заботы</span>
               <label className="toggle-switch toggle-switch--locked">
                 <input type="checkbox" checked disabled />
                 <span className="toggle-track" />
               </label>
-              <span className="caregiver-locked-hint">вкл. автоматически</span>
             </div>
-            {/* Мой опекун */}
+            <div className="settings-row">
+              <span className="settings-label--hint caregiver-block-hint">
+                Включается автоматически, пока есть связь с помощником
+              </span>
+            </div>
             <div className="settings-row settings-row--divided">
               <span className="settings-label">Мой помощник</span>
               <span className="caregiver-username">
                 @{data.active_caregiver!.caregiver_username ?? `id${data.active_caregiver!.caregiver_telegram_id}`}
               </span>
             </div>
-            {/* Кнопка отключения */}
             {data.active_caregiver!.break_requested ? (
               <div className="settings-row">
                 <span className="settings-label settings-label--hint-sm">
@@ -503,26 +586,34 @@ export default function SettingsPage() {
       ) : (
         /* ── Вид опекуна / независимого ── */
         <>
-          {/* Входящие запросы */}
-          {data.pending_requests && data.pending_requests.length > 0 && (
-            <div className="settings-block">
-              {data.pending_requests.map((req) => (
-                <div key={req.id} className="settings-row caregiver-request-row">
-                  <span className="settings-label">
-                    Запрос от @{req.caregiver_username ?? `id${req.caregiver_telegram_id}`}
-                  </span>
-                  <button className="dep-add-btn" onClick={() => confirmLink.mutate(req.id)} disabled={confirmLink.isPending}>
-                    Принять
-                  </button>
-                  <button className="dep-delete-btn" onClick={() => declineLink.mutate(req.id)} disabled={declineLink.isPending}>
-                    Отклонить
-                  </button>
-                </div>
+          {/* Все входящие запросы — один блок сверху */}
+          {(caregiverReqs.length > 0 || depShareReqs.length > 0) && (
+            <div className="settings-block settings-block--pending">
+              {caregiverReqs.map((req) => (
+                <PendingCard
+                  key={`cl${req.id}`}
+                  user={`@${req.caregiver_username ?? `id${req.caregiver_telegram_id}`}`}
+                  desc="хочет стать вашим помощником"
+                  onAccept={() => confirmLink.mutate(req.id)}
+                  onDecline={() => declineLink.mutate(req.id)}
+                  busy={confirmLink.isPending || declineLink.isPending}
+                />
+              ))}
+              {depShareReqs.map((v) => (
+                <PendingCard
+                  key={`ds${v.share_id}`}
+                  user={`@${v.username}`}
+                  desc={`хочет помогать с «${v.depName}»`}
+                  onAccept={() => confirmDepShare.mutate(v.share_id)}
+                  onDecline={() => declineDepShare.mutate(v.share_id)}
+                  busy={confirmDepShare.isPending || declineDepShare.isPending}
+                />
               ))}
             </div>
           )}
+
+          {/* Тогл + Мой код */}
           <div className="settings-block">
-            {/* 1. Тогл */}
             <div className="settings-row">
               <span className="settings-label">Режим заботы</span>
               <label className="toggle-switch">
@@ -568,7 +659,6 @@ export default function SettingsPage() {
 
             {!!data.caregiver_enabled && (
               <>
-                {/* 2. Мой код — сразу после тогла */}
                 <div className="settings-row">
                   <span className="settings-label">Мой код</span>
                   <button className="caregiver-code-chip" onClick={handleCopyCode} title="Скопировать и поделиться">
@@ -576,18 +666,88 @@ export default function SettingsPage() {
                     <span className="caregiver-code-icon">{codeCopied ? '✓' : '⎘'}</span>
                   </button>
                 </div>
+                <div className="settings-row">
+                  <span className="settings-label--hint caregiver-block-hint">
+                    Дайте этот код тому, кто хочет стать вашим помощником
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
 
-                {/* 3. Список подопечных */}
-                <div className="caregiver-divider" />
+          {!!data.caregiver_enabled && (
+            <>
+              {/* Мои близкие */}
+              <div className="settings-block">
+                <div className="settings-row">
+                  <span className="settings-label caregiver-block-label">Мои близкие</span>
+                </div>
 
-                {deps?.map((d) => (
-                  <div key={d.id} className="settings-row">
-                    <span className="settings-label">{d.name}</span>
-                    <button className="dep-delete-btn" onClick={() => deleteDep.mutate(d.id)} disabled={deleteDep.isPending}>
-                      Удалить
-                    </button>
-                  </div>
-                ))}
+                {deps?.map((d) => {
+                  const share = data.dep_shares?.[String(d.id)]
+                  const isShareOpen = shareOpenId === d.id
+                  const shareCode = share?.share_code
+                  const hasViewer = !!share?.active_viewer
+                  const hasPending = !!share?.pending_viewers?.length
+                  return (
+                    <div key={d.id}>
+                      <div className="settings-row caregiver-dep-row">
+                        <span className="settings-label">{d.name}</span>
+                        <div className="dep-row-actions">
+                          <button
+                            className={`btn-dep-share${isShareOpen ? ' btn-dep-share--active' : ''}${hasPending ? ' btn-dep-share--notify' : ''}`}
+                            onClick={() => handleToggleShare(d.id)}
+                            title={hasViewer ? 'Управление доступом' : `Дать доступ к ${d.name}`}
+                          >
+                            {hasPending ? '🔔' : hasViewer ? '👤' : '🔗'}
+                          </button>
+                          <button
+                            className="btn-detach"
+                            onClick={() => deleteDep.mutate(d.id)}
+                            disabled={deleteDep.isPending}
+                          >
+                            {hasViewer ? 'Отвязать' : 'Удалить'}
+                          </button>
+                        </div>
+                      </div>
+                      {isShareOpen && (
+                        <div className="dep-share-panel">
+                          <p className="dep-share-hint">
+                            {hasViewer
+                              ? `@${share!.active_viewer!.username} имеет доступ к «${d.name}» и может управлять его лекарствами`
+                              : `Передайте код тому, кто хочет помогать с «${d.name}» — он сможет добавлять и редактировать лекарства`}
+                          </p>
+                          {share?.active_viewer && (
+                            <div className="settings-row">
+                              <span className="settings-label settings-label--hint">Помогает</span>
+                              <button className="btn-detach" onClick={() => revokeDepShare.mutate(share.active_viewer!.share_id)} disabled={revokeDepShare.isPending}>
+                                Отозвать доступ
+                              </button>
+                            </div>
+                          )}
+                          <div className="settings-row">
+                            <span className="settings-label settings-label--hint">Код доступа</span>
+                            {shareCode ? (
+                              <button className="caregiver-code-chip" onClick={() => handleCopyDepShareCode(d.id, shareCode)} title="Скопировать">
+                                <span className="caregiver-code-text">{shareCode}</span>
+                                <span className="caregiver-code-icon">{shareCopiedId === d.id ? '✓' : '⎘'}</span>
+                              </button>
+                            ) : shareCodeError[d.id] ? (
+                              <button className="dep-add-btn" onClick={() => {
+                                setShareCodeError((p) => ({ ...p, [d.id]: false }))
+                                ensureDepShareCode.mutate(d.id, {
+                                  onError: () => setShareCodeError((p) => ({ ...p, [d.id]: true })),
+                                })
+                              }}>Повторить</button>
+                            ) : (
+                              <span className="settings-label--hint">генерация…</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
 
                 {data.active_dependents?.map((dep) => (
                   <div key={dep.id}>
@@ -644,32 +804,129 @@ export default function SettingsPage() {
                   </div>
                 ))}
 
-                {(!deps?.length && !data.active_dependents?.length && !data.pending_sent?.length) && (
-                  <div className="settings-row">
-                    <span className="settings-label settings-label--hint">Пока нет близких</span>
+                <div className="caregiver-divider" />
+
+                {addMode === 'none' && (
+                  <div className="caregiver-add-actions">
+                    <button className="caregiver-add-btn" onClick={() => { setAddMode('name'); setAddError('') }}>
+                      + Близкий
+                    </button>
+                    <button className="caregiver-add-btn caregiver-add-btn--ghost" onClick={() => { setAddMode('code'); setAddError('') }}>
+                      У меня есть код
+                    </button>
                   </div>
                 )}
 
-                {/* 4. Добавить */}
-                <div className="caregiver-divider" />
+                {addMode === 'name' && (
+                  <div className="caregiver-add-expand">
+                    <p className="caregiver-input-hint">Создать профиль близкого, за которым вы ухаживаете.</p>
+                    <input
+                      className="dep-name-input caregiver-add-input"
+                      placeholder="Имя близкого"
+                      value={nameInput}
+                      autoFocus
+                      onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddName()}
+                      maxLength={40}
+                    />
+                    {addError && <p className="hint error dep-input-error">{addError}</p>}
+                    <div className="caregiver-add-btn-row">
+                      <button className="caregiver-add-cancel-btn" onClick={resetAdd}>Отмена</button>
+                      <button className="caregiver-add-done-btn" onClick={handleAddName} disabled={!nameInput.trim() || createDep.isPending}>
+                        Добавить
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                <div className="settings-row settings-row--add">
-                  <input
-                    className="dep-name-input"
-                    placeholder="Имя или код XXXX-XXXX"
-                    value={newDepInput}
-                    onChange={(e) => setNewDepInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddDepOrLink()}
-                    maxLength={40}
-                  />
-                  <button className="dep-add-btn" onClick={handleAddDepOrLink} disabled={!newDepInput.trim() || createDep.isPending || requestLink.isPending}>
-                    Добавить
-                  </button>
+                {addMode === 'code' && (
+                  <div className="caregiver-add-expand">
+                    <input
+                      className="dep-name-input caregiver-add-input dep-code-input"
+                      placeholder="XXXX-XXXX"
+                      value={codeInput}
+                      autoFocus
+                      onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddCode()}
+                      maxLength={14}
+                    />
+                    <p className="caregiver-input-hint caregiver-input-hint--codes">
+                      <span><b>XXXX-XXXX</b> — стать помощником пользователя</span>
+                      <span><b>XXXX-XXXX-XXXX</b> — помогать с конкретным близким</span>
+                    </p>
+                    {addError && <p className="hint error dep-input-error">{addError}</p>}
+                    <div className="caregiver-add-btn-row">
+                      <button className="caregiver-add-cancel-btn" onClick={resetAdd}>Отмена</button>
+                      <button className="caregiver-add-done-btn" onClick={handleAddCode} disabled={!codeInput.trim() || requestLink.isPending || joinDepShare.isPending}>
+                        Подключить
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Помогаю (viewer side) */}
+              {(!!data.viewing_deps?.length || !!data.pending_viewing_deps?.length) && (
+                <div className="settings-block">
+                  <div className="settings-row">
+                    <span className="settings-label caregiver-block-label">Помогаю</span>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label--hint caregiver-block-hint">
+                      Близкие других пользователей, к которым вы подключились по коду доступа
+                    </span>
+                  </div>
+                  {data.pending_viewing_deps?.map((v) => (
+                    <div key={v.share_id} className="settings-row caregiver-dep-row">
+                      <span className="settings-label">
+                        {v.dep_name}
+                        <span className="settings-label--hint"> · @{v.owner_username}</span>
+                      </span>
+                      <div className="dep-row-actions">
+                        <span className="caregiver-status-badge pending">ожидает</span>
+                        <button className="btn-detach" onClick={() => leaveDepShare.mutate(v.share_id)} disabled={leaveDepShare.isPending}>
+                          Отменить
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {data.viewing_deps.map((v) => (
+                    <div key={v.share_id}>
+                      <div className="settings-row caregiver-dep-row">
+                        <span className="settings-label">
+                          {v.dep_name}
+                          <span className="settings-label--hint"> · @{v.owner_username}</span>
+                        </span>
+                        <div className="dep-row-actions">
+                          <span className="caregiver-status-badge active">подключено</span>
+                          {leaveConfirmId !== v.share_id ? (
+                            <button className="btn-detach" onClick={() => setLeaveConfirmId(v.share_id)}>
+                              Отписаться
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      {leaveConfirmId === v.share_id && (
+                        <div className="inline-confirm">
+                          <p className="inline-confirm-text">Вы перестанете видеть «{v.dep_name}» в приложении.</p>
+                          <div className="inline-confirm-actions">
+                            <button className="inline-confirm-btn inline-confirm-btn--cancel" onClick={() => setLeaveConfirmId(null)}>Отмена</button>
+                            <button
+                              className="inline-confirm-btn inline-confirm-btn--danger"
+                              onClick={() => { leaveDepShare.mutate(v.share_id); setLeaveConfirmId(null) }}
+                              disabled={leaveDepShare.isPending}
+                            >
+                              Отписаться
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                {depInputError && <p className="hint error dep-input-error">{depInputError}</p>}
-              </>
-            )}
-          </div>
+              )}
+            </>
+          )}
         </>
       )}
 
