@@ -48,14 +48,14 @@ async def get_links(telegram_id: int = Depends(require_telegram_user)):
 async def create_link(body: LinkRequest, telegram_id: int = Depends(require_telegram_user)):
     # F7-3.5: подопечный не может одновременно быть опекуном
     if await asyncio.to_thread(db.is_active_dependent, telegram_id):
-        raise HTTPException(403, "Подопечный не может привязывать других подопечных")
+        raise HTTPException(403, "Близкий не может привязывать других близких")
     try:
         result = await asyncio.to_thread(db.create_caregiver_link, telegram_id, body.code)
     except db.DatabaseError as e:
         raise HTTPException(400, str(e))
     await _bot_notify(
         result["dependent_telegram_id"],
-        "👨‍👩‍👦 Вам поступил запрос на подключение опекуна.\n"
+        "👨‍👩‍👦 Вам поступил запрос на подключение помощника.\n"
         "Откройте приложение, чтобы принять или отклонить.",
     )
     return {"id": result["id"]}
@@ -67,7 +67,7 @@ async def confirm_link(link_id: int, telegram_id: int = Depends(require_telegram
     if result == "not_found":
         raise HTTPException(404, "Запрос не найден или уже обработан")
     if result == "limit":
-        raise HTTPException(400, "Лимит подопечных достигнут (максимум 2)")
+        raise HTTPException(400, "Лимит близких достигнут (максимум 2)")
 
 
 @router.post("/{link_id}/decline", status_code=204)
@@ -91,8 +91,8 @@ async def request_break(link_id: int, telegram_id: int = Depends(require_telegra
         if care_tid:
             await _bot_notify(
                 care_tid,
-                "⚠️ Подопечный хочет отключиться от опеки. "
-                "Откройте приложение → Настройки → Опека для подтверждения.",
+                "⚠️ Близкий хочет отключиться. "
+                "Откройте приложение → Настройки → Забота для подтверждения.",
             )
 
 
@@ -100,4 +100,4 @@ async def request_break(link_id: int, telegram_id: int = Depends(require_telegra
 async def delete_link(link_id: int, telegram_id: int = Depends(require_telegram_user)):
     ok = await asyncio.to_thread(db.delete_caregiver_link, link_id, telegram_id)
     if not ok:
-        raise HTTPException(403, "Только опекун может разорвать связь")
+        raise HTTPException(403, "Только помощник может разорвать связь")

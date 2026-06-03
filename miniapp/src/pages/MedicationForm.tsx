@@ -501,7 +501,7 @@ export default function MedicationForm({ editId, linkedUserId, onBack }: Props) 
         <h1 className="form-title">
           {editId != null
             ? effectiveLinkedUserId ? 'Редактировать (близкий)' : 'Редактировать'
-            : effectiveLinkedUserId ? 'Добавить подопечному' : 'Добавить в аптечку'}
+            : effectiveLinkedUserId ? 'Добавить близкому' : 'Добавить в аптечку'}
         </h1>
       </div>
 

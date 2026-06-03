@@ -31,7 +31,7 @@ def _dependent_select_keyboard(dependents: list) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton("👤 Для себя", callback_data="select_dep:self")]]
     for d in dependents:
         rows.append([InlineKeyboardButton(f"👧 {d['name']}", callback_data=f"select_dep:{d['id']}")])
-    rows.append([InlineKeyboardButton("➕ Новый подопечный", callback_data="select_dep:new")])
+    rows.append([InlineKeyboardButton("➕ Новый близкий", callback_data="select_dep:new")])
     rows.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")])
     return InlineKeyboardMarkup(rows)
 
@@ -55,10 +55,10 @@ async def handle_select_dependent(update: Update, context: ContextTypes.DEFAULT_
 
     if data == "select_dep:new":
         if count_dependents(user.id) >= MAX_DEPENDENTS:
-            await query.answer(f"Максимум {MAX_DEPENDENTS} подопечных", show_alert=True)
+            await query.answer(f"Максимум {MAX_DEPENDENTS} близких", show_alert=True)
             return SELECT_DEPENDENT
         await query.edit_message_text(
-            f"Как зовут подопечного? (не более {DEPENDENT_NAME_MAX_LEN} символов):",
+            f"Как зовут близкого? (не более {DEPENDENT_NAME_MAX_LEN} символов):",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("❌ Отмена", callback_data="cancel_add")
             ]])
@@ -72,7 +72,7 @@ async def handle_select_dependent(update: Update, context: ContextTypes.DEFAULT_
     context.user_data["dependent_id"] = dep_id
 
     if count_active_medications(user_id, dep_id) >= MAX_MEDICATIONS_PER_USER:
-        entity = "у тебя" if dep_id is None else "у подопечного"
+        entity = "у тебя" if dep_id is None else "у близкого"
         await query.edit_message_text(
             f"⚠️ {entity.capitalize()} достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств."
         )
@@ -102,13 +102,13 @@ async def handle_new_dependent_name_in_flow(update: Update, context: ContextType
 
     if count_active_medications(user_id, dep_id) >= MAX_MEDICATIONS_PER_USER:
         await update.message.reply_text(
-            f"⚠️ У подопечного достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств."
+            f"⚠️ У близкого достигнут лимит: максимум {MAX_MEDICATIONS_PER_USER} лекарств."
         )
         context.user_data.clear()
         return ConversationHandler.END
 
     await update.message.reply_text(
-        f"✅ Подопечный <b>{escape_html(name)}</b> добавлен.\n\nКак называется лекарство?",
+        f"✅ Близкий <b>{escape_html(name)}</b> добавлен.\n\nКак называется лекарство?",
         parse_mode="HTML",
         reply_markup=_CANCEL_BTN
     )

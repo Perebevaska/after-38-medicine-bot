@@ -324,7 +324,7 @@ async def _apply_strict_autoskip(schedules):
                     'send_reminder',
                     chat_id=tid,
                     text=(f"⏰ <b>{escape_html(r['name'])}</b>{dep} автоматически отмечен "
-                          f"пропущенным (строгий режим, прошло {hours} ч). −1 ❤️"),
+                          f"пропущенным (режим «Без пропусков», прошло {hours} ч). −1 ❤️"),
                 )
             except Exception as e:
                 logger.error("strict autoskip enqueue error: %s", e)

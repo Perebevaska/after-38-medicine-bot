@@ -44,7 +44,7 @@ ABOUT_TEXT = (
     '📦 <a href="https://github.com/Perebevaska/after-30-medicine-bot">GitHub</a>\n\n'
     "<b>В планах:</b>\n"
     "✅ Быстрое подтверждение всех лекарств одной кнопкой\n"
-    "🔔 Уведомления опекуну о пропусках подопечного\n"
+    "🔔 Уведомления помощнику о пропусках близкого\n"
     "📱 Telegram Mini App"
 )
 

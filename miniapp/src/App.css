@@ -1874,17 +1874,73 @@
   align-items: center;
 }
 
-.caregiver-off-info {
-  padding: 8px 0 4px;
-  border-top: 1px solid var(--secondary-bg);
+/* ── Inline confirm (caregiver-off / detach) — общий стиль ─────────────── */
+.inline-confirm {
+  padding: 12px 14px;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.caregiver-off-info-text {
+.inline-confirm-text {
   font-size: 0.82em;
   color: var(--hint);
-  line-height: 1.4;
-  margin: 0 0 8px;
+  line-height: 1.45;
+  margin: 0;
 }
+
+.inline-confirm-text b { color: var(--text); }
+
+.inline-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inline-confirm-btn {
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.inline-confirm-btn:disabled { opacity: 0.5; cursor: default; }
+
+.inline-confirm-btn--cancel {
+  background: var(--secondary-bg);
+  border-color: rgba(128,128,128,0.2);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.inline-confirm-btn--primary {
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+
+.inline-confirm-btn--danger {
+  background: rgba(204, 51, 51, 0.08);
+  border-color: rgba(204, 51, 51, 0.25);
+  color: rgba(204, 51, 51, 0.9);
+}
+
+/* Триггер «Отвязать» — pill в стиле «Удалить мои данные» */
+.btn-detach {
+  background: rgba(204, 51, 51, 0.08);
+  border: 1px solid rgba(204, 51, 51, 0.25);
+  color: rgba(204, 51, 51, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.btn-detach:active { opacity: 0.7; }
 
 .caregiver-divider {
   height: 1px;

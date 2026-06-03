@@ -15,7 +15,7 @@ def _caregiver_text(enabled: bool, dependents: list) -> str:
         f"Статус: {status}",
     ]
     if enabled and dependents:
-        lines.append(f"Подопечные ({dep_count} из {MAX_DEPENDENTS}):")
+        lines.append(f"Близкие ({dep_count} из {MAX_DEPENDENTS}):")
         for d in dependents:
             lines.append(f"  • {escape_html(d['name'])}")
     lines.append(
@@ -35,7 +35,7 @@ def _caregiver_keyboard(enabled: bool, dependents: list) -> InlineKeyboardMarkup
                 InlineKeyboardButton("🗑 Удалить", callback_data=f"caregiver:delete:{d['id']}"),
             ])
         if len(dependents) < MAX_DEPENDENTS:
-            rows.append([InlineKeyboardButton("➕ Добавить подопечного", callback_data="caregiver:add")])
+            rows.append([InlineKeyboardButton("➕ Добавить близкого", callback_data="caregiver:add")])
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="caregiver:back")])
     return InlineKeyboardMarkup(rows)
 
@@ -78,10 +78,10 @@ async def handle_caregiver_add_start(update: Update, context: ContextTypes.DEFAU
     await query.answer()
     tid = update.effective_user.id
     if count_dependents(tid) >= MAX_DEPENDENTS:
-        await query.answer(f"Максимум {MAX_DEPENDENTS} подопечных", show_alert=True)
+        await query.answer(f"Максимум {MAX_DEPENDENTS} близких", show_alert=True)
         return ConversationHandler.END
     await query.message.reply_text(
-        f"Как зовут подопечного? (не более {DEPENDENT_NAME_MAX_LEN} символов):",
+        f"Как зовут близкого? (не более {DEPENDENT_NAME_MAX_LEN} символов):",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("❌ Отмена", callback_data="caregiver:cancel_add")
         ]])
@@ -106,7 +106,7 @@ async def handle_caregiver_add_name(update: Update, context: ContextTypes.DEFAUL
     enabled = get_caregiver_mode(tid)
     dependents = get_dependents(tid)
     await update.message.reply_text(
-        f"✅ Подопечный <b>{escape_html(name)}</b> добавлен.\n\n" + _caregiver_text(enabled, dependents),
+        f"✅ Близкий <b>{escape_html(name)}</b> добавлен.\n\n" + _caregiver_text(enabled, dependents),
         parse_mode="HTML",
         reply_markup=_caregiver_keyboard(enabled, dependents)
     )
@@ -133,7 +133,7 @@ async def handle_caregiver_delete_prompt(update: Update, context: ContextTypes.D
     if not dep:
         return
     await query.edit_message_text(
-        f"⚠️ Удалить подопечного <b>{escape_html(dep['name'])}</b>?\n\n"
+        f"⚠️ Удалить близкого <b>{escape_html(dep['name'])}</b>?\n\n"
         f"Все их лекарства и история приёмов будут удалены.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
@@ -157,7 +157,7 @@ async def handle_caregiver_delete_confirm(update: Update, context: ContextTypes.
     enabled = get_caregiver_mode(tid)
     dependents = get_dependents(tid)
     await query.edit_message_text(
-        "✅ Подопечный удалён.\n\n" + _caregiver_text(enabled, dependents),
+        "✅ Близкий удалён.\n\n" + _caregiver_text(enabled, dependents),
         parse_mode="HTML",
         reply_markup=_caregiver_keyboard(enabled, dependents)
     )

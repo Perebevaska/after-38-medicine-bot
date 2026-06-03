@@ -134,7 +134,7 @@ async def create_medication(body: MedicationIn, user: TelegramUser = Depends(req
             db.is_caregiver_for_user_id, user.telegram_id, body.for_linked_user_id
         )
         if not ok:
-            raise HTTPException(403, "Нет активной связи с этим подопечным")
+            raise HTTPException(403, "Нет активной связи с этим близким")
         target_user_id = body.for_linked_user_id
         dep_id = None
     else:
@@ -142,7 +142,7 @@ async def create_medication(body: MedicationIn, user: TelegramUser = Depends(req
         if body.dependent_id is not None:
             deps = await asyncio.to_thread(db.get_dependents, user.telegram_id)
             if body.dependent_id not in {d["id"] for d in deps}:
-                raise HTTPException(404, "Подопечный не найден")
+                raise HTTPException(404, "Близкий не найден")
         target_user_id = user.user_id
         dep_id = body.dependent_id
     count = await asyncio.to_thread(db.count_active_medications, target_user_id, dep_id)

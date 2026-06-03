@@ -32,7 +32,7 @@ async def create_dependent(body: DependentIn, telegram_id: int = Depends(require
     # F7-3.4: лимит суммарный (локальные + linked)
     count = await asyncio.to_thread(db.count_total_dependents, telegram_id)
     if count >= MAX_DEPENDENTS:
-        raise HTTPException(400, f"Лимит {MAX_DEPENDENTS} подопечных достигнут")
+        raise HTTPException(400, f"Лимит {MAX_DEPENDENTS} близких достигнут")
     dep_id = await asyncio.to_thread(db.add_dependent, telegram_id, body.name)
     return {"id": dep_id}
 
@@ -41,4 +41,4 @@ async def create_dependent(body: DependentIn, telegram_id: int = Depends(require
 async def delete_dependent(dep_id: int, telegram_id: int = Depends(require_telegram_user)):
     med_ids = await asyncio.to_thread(db.delete_dependent, telegram_id, dep_id)
     if med_ids is None:
-        raise HTTPException(404, "Подопечный не найден")
+        raise HTTPException(404, "Близкий не найден")

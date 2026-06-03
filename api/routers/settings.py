@@ -113,7 +113,7 @@ async def set_timezone_by_location(body: LocationIn, telegram_id: int = Depends(
 @router.put("/reminder-mode", status_code=204)
 async def set_reminder_mode(body: ReminderModeIn, telegram_id: int = Depends(require_telegram_user)):
     if await asyncio.to_thread(db.is_active_dependent, telegram_id):
-        raise HTTPException(403, "Опекун управляет этой настройкой")
+        raise HTTPException(403, "Помощник управляет этой настройкой")
     await asyncio.to_thread(db.set_reminder_mode, telegram_id, body.mode, body.hours, body.minutes or 0)
 
 
@@ -140,7 +140,7 @@ async def set_caregiver(body: CaregiverIn, telegram_id: int = Depends(require_te
 @router.put("/strict-mode", status_code=204)
 async def set_strict_mode(body: StrictModeIn, telegram_id: int = Depends(require_telegram_user)):
     if await asyncio.to_thread(db.is_active_dependent, telegram_id):
-        raise HTTPException(403, "Опекун управляет этой настройкой")
+        raise HTTPException(403, "Помощник управляет этой настройкой")
     await asyncio.to_thread(db.set_strict_mode, telegram_id, body.enabled, body.hours, body.minutes or 0)
 
 
@@ -154,7 +154,7 @@ async def set_dependent_reminder_mode(
         reminder_mode=body.mode, reminder_hours=body.hours, reminder_minutes=body.minutes or 0,
     )
     if not ok:
-        raise HTTPException(403, "Нет активной связи с подопечным")
+        raise HTTPException(403, "Нет активной связи с близким")
 
 
 @router.put("/dependent-strict-mode", status_code=204)
@@ -167,7 +167,7 @@ async def set_dependent_strict_mode(
         strict_mode=body.enabled, strict_hours=body.hours, strict_minutes=body.minutes or 0,
     )
     if not ok:
-        raise HTTPException(403, "Нет активной связи с подопечным")
+        raise HTTPException(403, "Нет активной связи с близким")
 
 
 @router.delete("/account", status_code=204)

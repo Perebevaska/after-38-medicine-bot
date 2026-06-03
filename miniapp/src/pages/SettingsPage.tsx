@@ -198,7 +198,7 @@ export default function SettingsPage() {
     setTimeout(() => setCodeCopied(false), 2000)
     try {
       const tg = (window as any).Telegram?.WebApp
-      tg?.openTelegramLink?.(`https://t.me/share/url?url=${encodeURIComponent(code)}&text=${encodeURIComponent('Мой код для подключения опекуна: ' + code)}`)
+      tg?.openTelegramLink?.(`https://t.me/share/url?url=${encodeURIComponent(code)}&text=${encodeURIComponent('Мой код для подключения помощника: ' + code)}`)
     } catch {}
   }
 
@@ -323,7 +323,7 @@ export default function SettingsPage() {
               {isDependent ? (
                 <span className="settings-locked-row-right">
                   <span className="settings-time-chip settings-time-chip--locked">{repeatTime}</span>
-                  <span className="caregiver-locked-hint">управляется опекуном</span>
+                  <span className="caregiver-locked-hint">управляется помощником</span>
                 </span>
               ) : (
                 <span className={`settings-time-chip${repeatTimeOpen ? ' settings-time-chip--active' : ''}`}>
@@ -411,7 +411,7 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <h2 className="section-title">Строгий режим</h2>
+      <h2 className="section-title">Без пропусков</h2>
       <p className="section-hint">
         Если не отметить приём за заданное число часов после времени — он
         автоматически считается пропущенным и снимается ❤️.
@@ -442,7 +442,7 @@ export default function SettingsPage() {
               {isDependent ? (
                 <span className="settings-locked-row-right">
                   <span className="settings-time-chip settings-time-chip--locked">{strictTime}</span>
-                  <span className="caregiver-locked-hint">управляется опекуном</span>
+                  <span className="caregiver-locked-hint">управляется помощником</span>
                 </span>
               ) : (
                 <span className={`settings-time-chip${strictTimeOpen ? ' settings-time-chip--active' : ''}`}>
@@ -533,7 +533,7 @@ export default function SettingsPage() {
             </div>
             {/* Мой опекун */}
             <div className="settings-row" style={{ borderTop: '1px solid var(--secondary-bg)', paddingTop: 10, marginTop: 2 }}>
-              <span className="settings-label">Мой опекун</span>
+              <span className="settings-label">Мой помощник</span>
               <span className="caregiver-username">
                 @{data.active_caregiver!.caregiver_username ?? `id${data.active_caregiver!.caregiver_telegram_id}`}
               </span>
@@ -552,7 +552,7 @@ export default function SettingsPage() {
                   onClick={() => requestBreak.mutate(data.active_caregiver!.id)}
                   disabled={requestBreak.isPending}
                 >
-                  Отключиться от опекуна
+                  Отключиться от помощника
                 </button>
               </div>
             )}
@@ -601,17 +601,26 @@ export default function SettingsPage() {
             </div>
 
             {caregiverOffConfirm && (
-              <div className="caregiver-off-info">
-                <p className="caregiver-off-info-text">
-                  Связь с подопечными <b>не удаляется</b> — отключается только наблюдение в приложении и уведомления.
+              <div className="inline-confirm">
+                <p className="inline-confirm-text">
+                  Связь с близкими <b>не удаляется</b> — отключается только наблюдение в приложении и уведомления.
                 </p>
-                <button
-                  className="tz-change-btn"
-                  onClick={() => { setCaregiver.mutate(false); setCaregiverOffConfirm(false) }}
-                  disabled={setCaregiver.isPending}
-                >
-                  Понятно
-                </button>
+                <div className="inline-confirm-actions">
+                  <button
+                    className="inline-confirm-btn inline-confirm-btn--cancel"
+                    onClick={() => setCaregiverOffConfirm(false)}
+                    disabled={setCaregiver.isPending}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    className="inline-confirm-btn inline-confirm-btn--primary"
+                    onClick={() => { setCaregiver.mutate(false); setCaregiverOffConfirm(false) }}
+                    disabled={setCaregiver.isPending}
+                  >
+                    Отключить
+                  </button>
+                </div>
               </div>
             )}
 
@@ -655,7 +664,7 @@ export default function SettingsPage() {
                         </button>
                       ) : detachConfirmId === dep.id ? null : (
                         <button
-                          className="dep-delete-btn"
+                          className="btn-detach"
                           onClick={() => setDetachConfirmId(dep.id)}
                         >
                           Отвязать
@@ -663,16 +672,16 @@ export default function SettingsPage() {
                       )}
                     </div>
                     {detachConfirmId === dep.id && (
-                      <div className="account-delete-confirm" style={{ padding: '8px 0 4px', borderTop: '1px solid var(--secondary-bg)' }}>
-                        <p className="account-delete-warn">
-                          Подопечный потеряет доступ к управлению своими настройками через опекуна.
+                      <div className="inline-confirm">
+                        <p className="inline-confirm-text">
+                          Близкий потеряет доступ к управлению своими настройками через помощника.
                         </p>
-                        <div className="account-delete-actions">
-                          <button className="account-delete-cancel-btn" onClick={() => setDetachConfirmId(null)} disabled={deleteLink.isPending}>
+                        <div className="inline-confirm-actions">
+                          <button className="inline-confirm-btn inline-confirm-btn--cancel" onClick={() => setDetachConfirmId(null)} disabled={deleteLink.isPending}>
                             Отмена
                           </button>
                           <button
-                            className="account-delete-confirm-btn"
+                            className="inline-confirm-btn inline-confirm-btn--danger"
                             onClick={() => { deleteLink.mutate(dep.id); setDetachConfirmId(null) }}
                             disabled={deleteLink.isPending}
                           >
@@ -695,7 +704,7 @@ export default function SettingsPage() {
 
                 {(!deps?.length && !data.active_dependents?.length && !data.pending_sent?.length) && (
                   <div className="settings-row">
-                    <span className="settings-label" style={{ color: 'var(--hint)' }}>Пока нет подопечных</span>
+                    <span className="settings-label" style={{ color: 'var(--hint)' }}>Пока нет близких</span>
                   </div>
                 )}
 
@@ -891,8 +900,8 @@ export default function SettingsPage() {
         ) : deleteBlockedByCaregiver ? (
           <div className="account-delete-confirm">
             <p className="account-delete-warn" style={{ color: 'var(--hint)' }}>
-              Удаление невозможно, пока есть связь с опекуном.
-              Сначала отключись от опекуна в блоке «Забота» выше.
+              Удаление невозможно, пока есть связь с помощником.
+              Сначала отключись от помощника в блоке «Забота» выше.
             </p>
             <button className="btn-cancel-delete" onClick={() => setDeleteBlockedByCaregiver(false)}>
               Понятно

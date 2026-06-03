@@ -268,7 +268,7 @@ def _prepare_doctor_model(rules, taken_rows, user_tz, start_day, today, user_lab
         if tot_s == 0:
             continue  # у субъекта нет положенных приёмов за период — страницу не рисуем
         subjects.append({
-            "label": f"Пациент: {user_label}" if dep_name is None else f"Подопечный: {dep_name}",
+            "label": f"Пациент: {user_label}" if dep_name is None else f"Близкий: {dep_name}",
             "mids": mids, "names": meta, "due": due, "taken": taken,
             "day_pct": day_pct, "summary": summary, "overall": round(tot_t / tot_s * 100),
         })

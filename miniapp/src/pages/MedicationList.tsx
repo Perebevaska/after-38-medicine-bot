@@ -241,7 +241,7 @@ export default function MedicationList({ onAdd, onEdit }: Props) {
               className="mlist-add-btn"
               style={{ width: '100%', borderRadius: 8, height: 36, fontSize: '0.9em' }}
               onClick={() => onAdd(group.meds[0]?.linked_user_id)}
-              title="Добавить лекарство подопечному"
+              title="Добавить лекарство близкому"
             >
               <Plus size={16} strokeWidth={2} /> Добавить
             </button>
