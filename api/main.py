@@ -156,7 +156,7 @@ async def _validation_handler(request: Request, exc: RequestValidationError):
 
 # ── Routers ──────────────────────────────────────────────────────────────────
 
-from api.routers import medications, today, stats, stock, dependents, settings, export
+from api.routers import medications, today, stats, stock, dependents, settings, export, admin
 
 app.include_router(medications.router)
 app.include_router(today.router)
@@ -165,6 +165,7 @@ app.include_router(stock.router)
 app.include_router(dependents.router)
 app.include_router(settings.router)
 app.include_router(export.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

@@ -119,4 +119,43 @@ export interface UserSettings {
   hearts: number
   strict_mode: number
   strict_mode_hours: number
+  reminder_repeat_hours: number
+  is_admin: boolean
+}
+
+export interface ServiceStatus {
+  name: string
+  unit: string
+  status: string
+}
+
+export interface AdminStats {
+  db: string
+  redis: string
+  services: ServiceStatus[]
+  total_users: number
+  total_meds: number
+  active_today: number
+  // system
+  cpu_pct: number
+  cpu_count: number
+  load_1m: number
+  ram_used_mb: number
+  ram_total_mb: number
+  ram_pct: number
+  swap_used_mb: number
+  swap_total_mb: number
+  swap_pct: number
+  disk_used_gb: number
+  disk_free_gb: number
+  disk_total_gb: number
+  disk_pct: number
+  // redis
+  redis_mem?: string
+  redis_clients?: number
+  arq_queue?: number
+  // db pool
+  db_pool_size?: number
+  db_pool_available?: number
+  db_pool_requests?: number
 }

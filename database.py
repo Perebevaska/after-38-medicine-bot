@@ -81,6 +81,7 @@ def init_db():
             hearts INTEGER DEFAULT 0,
             strict_mode INTEGER DEFAULT 0,
             strict_mode_hours INTEGER DEFAULT 2,
+            reminder_repeat_hours INTEGER DEFAULT 2,
             created_at TEXT DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
         )
         """,
@@ -165,8 +166,9 @@ def migrate():
             ("daily_plan_time",    "TEXT DEFAULT '08:00'"),
             ("caregiver_enabled",  "INTEGER DEFAULT 0"),
             ("hearts",             "INTEGER DEFAULT 0"),
-            ("strict_mode",        "INTEGER DEFAULT 0"),
-            ("strict_mode_hours",  "INTEGER DEFAULT 2"),
+            ("strict_mode",            "INTEGER DEFAULT 0"),
+            ("strict_mode_hours",      "INTEGER DEFAULT 2"),
+            ("reminder_repeat_hours",  "INTEGER DEFAULT 2"),
         ]:
             conn.execute(
                 f"ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS {col} {definition}"
@@ -227,13 +229,19 @@ def get_reminder_mode(telegram_id: int) -> str:
         return row["reminder_mode"] if row else "once"
 
 
-def set_reminder_mode(telegram_id: int, mode: str):
-    """Устанавливает режим напоминаний."""
+def set_reminder_mode(telegram_id: int, mode: str, hours: int = None):
+    """Устанавливает режим напоминаний; опционально обновляет reminder_repeat_hours."""
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE users SET reminder_mode = %s WHERE telegram_id = %s",
-            (mode, telegram_id)
-        )
+        if hours is None:
+            conn.execute(
+                "UPDATE users SET reminder_mode = %s WHERE telegram_id = %s",
+                (mode, telegram_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET reminder_mode = %s, reminder_repeat_hours = %s WHERE telegram_id = %s",
+                (mode, hours, telegram_id)
+            )
 
 
 def set_user_timezone(telegram_id: int, timezone: str):
@@ -466,7 +474,7 @@ def get_active_schedule_rows() -> list:
         return conn.execute(
             """SELECT u.telegram_id, u.id AS user_id, u.timezone, u.reminder_mode,
                       u.daily_plan_enabled, u.daily_plan_time,
-                      u.strict_mode, u.strict_mode_hours,
+                      u.strict_mode, u.strict_mode_hours, u.reminder_repeat_hours,
                       m.id AS medication_id, m.name, m.dosage AS med_dosage, m.meal_relation,
                       sr.reminder_time, sr.frequency, sr.interval_days,
                       sr.weekdays, sr.month_day, sr.anchor_date, sr.dosage AS rule_dosage,
@@ -713,7 +721,7 @@ def get_user_settings_row(telegram_id: int):
             """SELECT timezone, reminder_mode,
                       time_morning, time_lunch, time_evening, time_night,
                       daily_plan_enabled, daily_plan_time, caregiver_enabled,
-                      hearts, strict_mode, strict_mode_hours
+                      hearts, strict_mode, strict_mode_hours, reminder_repeat_hours
                FROM users WHERE telegram_id = %s""",
             (telegram_id,)
         ).fetchone()

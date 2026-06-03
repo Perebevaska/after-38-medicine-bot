@@ -30,22 +30,28 @@ function scheduleLabel(med: Medication): string {
 
 type CardView = 'collapsed' | 'actions' | 'stock' | 'confirm-delete'
 
+const CLOSE_MS = 220
+
 function MedCard({ med, onEdit }: { med: Medication; onEdit: (id: number) => void }) {
   const [view, setView] = useState<CardView>('collapsed')
+  const [isOpen, setIsOpen] = useState(false)
   const { mutate: del, isPending: delPending } = useDeleteMedication()
   const { mutate: pause, isPending: pausePending } = usePauseMedication()
 
-  const toggle = () => setView((v) => (v === 'collapsed' ? 'actions' : 'collapsed'))
+  const open = () => { setView('actions'); setIsOpen(true) }
+  const close = () => {
+    setIsOpen(false)
+    setTimeout(() => setView('collapsed'), CLOSE_MS)
+  }
+  const toggle = () => (isOpen ? close() : open())
 
   const handlePause = () => {
-    pause({ id: med.id, paused: !med.paused }, { onSuccess: () => setView('collapsed') })
+    pause({ id: med.id, paused: !med.paused }, { onSuccess: close })
   }
 
   const handleDelete = () => {
-    del(med.id, { onSuccess: () => setView('collapsed') })
+    del(med.id, { onSuccess: close })
   }
-
-  const isOpen = view !== 'collapsed'
 
   return (
     <div className={`mlist-card mlist-card--col${isOpen ? ' mlist-card--open' : ''}`}>
@@ -74,8 +80,8 @@ function MedCard({ med, onEdit }: { med: Medication; onEdit: (id: number) => voi
         <span className={`mlist-card-chevron${isOpen ? ' mlist-card-chevron--open' : ''}`}>›</span>
       </div>
 
-      {isOpen && (
-        <div className="mlist-card-body">
+      <div className="mlist-card-body">
+        <div className="mlist-card-body-inner">
           {view === 'actions' && (
             <div className="mlist-action-row">
               <button
@@ -138,7 +144,7 @@ function MedCard({ med, onEdit }: { med: Medication; onEdit: (id: number) => voi
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

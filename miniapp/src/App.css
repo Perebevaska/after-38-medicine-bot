@@ -539,7 +539,19 @@
 }
 
 .mlist-card-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+  overflow: hidden;
   background: var(--secondary-bg);
+}
+
+.mlist-card--open .mlist-card-body {
+  grid-template-rows: 1fr;
+}
+
+.mlist-card-body-inner {
+  min-height: 0;
 }
 
 .mlist-action-row {
@@ -1846,6 +1858,60 @@
   text-align: center;
   padding: 8px 0;
 }
+
+/* ── Admin panel ─────────────────────────────────────────────────────────── */
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--hint);
+  cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.info-tip-popup {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 100;
+  width: 220px;
+  background: var(--secondary-bg);
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  pointer-events: none;
+}
+
+.admin-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hint);
+  padding: 8px 16px 2px;
+}
+
+.admin-status {
+  font-size: 13px;
+  font-weight: 500;
+}
+.admin-status--ok { color: #28a745; }
+.admin-status--err { color: #cc3333; }
+
+.admin-stat-val {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.admin-stat--warn { color: #e07b00; }
 
 /* ── Account deletion ────────────────────────────────────────────────────── */
 

@@ -1,9 +1,46 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   useSettings, useSetReminderMode, useSetDailyPlan, useSetCaregiver,
   useDependents, useCreateDependent, useDeleteDependent,
   useSetTimezone, useSetTimezoneByLocation, useDeleteAccount, useSetStrictMode,
+  useAdminStats,
 } from '../api/hooks'
+
+function InfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+  return (
+    <span ref={ref} className="info-tip" onClick={() => setOpen(v => !v)}>
+      ⓘ
+      {open && <span className="info-tip-popup">{text}</span>}
+    </span>
+  )
+}
+
+const METRIC_HINTS: Record<string, string> = {
+  'PostgreSQL': 'Проверяет: SELECT 1. Ловит: сервер недоступен, ошибка соединения, пул исчерпан.',
+  'Redis': 'Проверяет: PING. Ловит: Redis не запущен, неверный URL, сеть недоступна.',
+  'CPU': 'cpu_percent за 0.2с + load average за 1 мин (число процессов в очереди на CPU).',
+  'RAM': 'Физическая память: занято / всего. >85% — предупреждение.',
+  'SWAP': 'Раздел подкачки. Активный SWAP = RAM не хватает. >50% — предупреждение.',
+  'Disk': 'Корневой раздел /. Свободно / всего. >85% — предупреждение.',
+  'Redis память': 'used_memory из Redis INFO — сколько RAM занимают данные в Redis (ключи rate-limit, scheduler state, ARQ очередь).',
+  'Redis клиентов': 'connected_clients из Redis INFO — активные соединения к Redis.',
+  'ARQ очередь': 'Длина очереди arq:queue:default. Рост означает затор отправки Telegram-сообщений (429 или worker упал).',
+  'DB pool': 'psycopg_pool: свободных / всего соединений. Ожидают > 0 — запросы стоят в очереди.',
+  'Bot': 'systemctl is-active medbot-bot — процесс бота (APScheduler + handlers).',
+  'API': 'systemctl is-active medbot-api — FastAPI / uvicorn (Mini App backend).',
+  'Worker': 'systemctl is-active medbot-worker — ARQ worker (отправка Telegram-сообщений из очереди).',
+  'Caddy': 'systemctl is-active caddy — reverse proxy (HTTPS, /api → FastAPI, / → Mini App dist).',
+}
 
 const TIMEZONES: { value: string; label: string }[] = [
   { value: 'Europe/Kaliningrad', label: 'Калининград UTC+2' },
@@ -58,8 +95,10 @@ export default function SettingsPage() {
   const setTzByLocation = useSetTimezoneByLocation()
 
   const deleteAccount = useDeleteAccount()
+  const { data: adminStats, refetch: refetchAdmin } = useAdminStats(!!data?.is_admin)
   const [dailyPlanTime, setDailyPlanTime] = useState('08:00')
   const [strictHours, setStrictHours] = useState(2)
+  const [repeatHours, setRepeatHours] = useState(2)
   const [newDepName, setNewDepName] = useState('')
   const [tzEditing, setTzEditing] = useState(false)
   const [tzSearch, setTzSearch] = useState('')
@@ -103,6 +142,7 @@ export default function SettingsPage() {
     if (!data) return
     setDailyPlanTime(data.daily_plan_time ?? '08:00')
     setStrictHours(data.strict_mode_hours ?? 2)
+    setRepeatHours(data.reminder_repeat_hours ?? 2)
   }, [data])
 
   if (isLoading) return <div className="page"><p className="hint">Загрузка…</p></div>
@@ -123,7 +163,7 @@ export default function SettingsPage() {
 
       <h2 className="section-title">Напоминания</h2>
       <p className="section-hint">
-        Если включён повтор — бот будет напоминать каждые 5 минут до 2 часов, пока не отметишь приём.
+        Если включён повтор — бот будет напоминать каждые 5 минут, пока не отметишь приём или не истечёт заданное время.
       </p>
       <div className="settings-block">
         <div className="settings-row">
@@ -132,11 +172,25 @@ export default function SettingsPage() {
             <input
               type="checkbox"
               checked={data.reminder_mode === 'repeat'}
-              onChange={(e) => setMode.mutate(e.target.checked ? 'repeat' : 'once')}
+              onChange={(e) => setMode.mutate({ mode: e.target.checked ? 'repeat' : 'once', hours: repeatHours })}
             />
             <span className="toggle-track" />
           </label>
         </div>
+        {data.reminder_mode === 'repeat' && (
+          <div className="settings-row">
+            <span className="settings-label">Повторять до (часов)</span>
+            <input
+              type="number"
+              className="settings-time-input"
+              min={1}
+              max={12}
+              value={repeatHours}
+              onChange={(e) => setRepeatHours(Math.min(12, Math.max(1, +e.target.value)))}
+              onBlur={() => setMode.mutate({ mode: 'repeat', hours: repeatHours })}
+            />
+          </div>
+        )}
       </div>
 
       <h2 className="section-title">Ежедневный план</h2>
@@ -318,6 +372,111 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {!!data.is_admin && (
+        <>
+          <h2 className="section-title">Админ-панель</h2>
+          <div className="settings-block admin-panel">
+            {!adminStats ? (
+              <div className="settings-row">
+                <span className="settings-label" style={{ color: 'var(--hint)' }}>Загрузка…</span>
+              </div>
+            ) : (
+              <>
+                <div className="admin-section-label">Сервисы</div>
+                {adminStats.services?.map((svc) => (
+                  <div key={svc.unit} className="settings-row">
+                    <span className="settings-label">{svc.name}{METRIC_HINTS[svc.name] && <InfoTip text={METRIC_HINTS[svc.name]} />}</span>
+                    <span className={`admin-status ${svc.status === 'active' ? 'admin-status--ok' : 'admin-status--err'}`}>
+                      ● {svc.status}
+                    </span>
+                  </div>
+                ))}
+
+                <div className="admin-section-label">CPU / RAM / Disk</div>
+                <div className="settings-row">
+                  <span className="settings-label">CPU<InfoTip text={METRIC_HINTS['CPU']} /></span>
+                  <span className={`admin-stat-val${adminStats.cpu_pct > 80 || adminStats.load_1m > adminStats.cpu_count ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.cpu_pct}% · load {adminStats.load_1m}
+                  </span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">RAM<InfoTip text={METRIC_HINTS['RAM']} /></span>
+                  <span className={`admin-stat-val${adminStats.ram_pct > 85 ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.ram_pct}% · {adminStats.ram_used_mb} / {adminStats.ram_total_mb} МБ
+                  </span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">SWAP<InfoTip text={METRIC_HINTS['SWAP']} /></span>
+                  <span className={`admin-stat-val${adminStats.swap_pct > 50 ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.swap_total_mb > 0
+                      ? `${adminStats.swap_pct}% · ${adminStats.swap_used_mb} / ${adminStats.swap_total_mb} МБ`
+                      : 'не настроен'}
+                  </span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">Disk<InfoTip text={METRIC_HINTS['Disk']} /></span>
+                  <span className={`admin-stat-val${adminStats.disk_pct > 85 ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.disk_pct}% · {adminStats.disk_free_gb} ГБ своб. / {adminStats.disk_total_gb} ГБ
+                  </span>
+                </div>
+
+                <div className="admin-section-label">Redis</div>
+                <div className="settings-row">
+                  <span className="settings-label">Redis память<InfoTip text={METRIC_HINTS['Redis память']} /></span>
+                  <span className="admin-stat-val">{adminStats.redis_mem ?? '—'}</span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">Redis клиентов<InfoTip text={METRIC_HINTS['Redis клиентов']} /></span>
+                  <span className={`admin-stat-val${(adminStats.redis_clients ?? 0) > 20 ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.redis_clients ?? '—'}
+                  </span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">ARQ очередь<InfoTip text={METRIC_HINTS['ARQ очередь']} /></span>
+                  <span className={`admin-stat-val${(adminStats.arq_queue ?? 0) > 50 ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.arq_queue ?? '—'}
+                  </span>
+                </div>
+
+                <div className="admin-section-label">DB pool</div>
+                <div className="settings-row">
+                  <span className="settings-label">Соединений<InfoTip text={METRIC_HINTS['DB pool']} /></span>
+                  <span className={`admin-stat-val${(adminStats.db_pool_available ?? 99) < 2 ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.db_pool_available ?? '—'} / {adminStats.db_pool_size ?? '—'} свободно
+                  </span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">Ожидают<InfoTip text={METRIC_HINTS['DB pool']} /></span>
+                  <span className={`admin-stat-val${(adminStats.db_pool_requests ?? 0) > 0 ? ' admin-stat--warn' : ''}`}>
+                    {adminStats.db_pool_requests ?? '—'}
+                  </span>
+                </div>
+
+                <div className="admin-section-label">Пользователи</div>
+                <div className="settings-row">
+                  <span className="settings-label">Всего</span>
+                  <span className="admin-stat-val">{adminStats.total_users}</span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">Лекарств активных</span>
+                  <span className="admin-stat-val">{adminStats.total_meds}</span>
+                </div>
+                <div className="settings-row">
+                  <span className="settings-label">Активных сегодня</span>
+                  <span className="admin-stat-val">{adminStats.active_today}</span>
+                </div>
+
+                <div className="settings-row" style={{ justifyContent: 'center', paddingTop: 4 }}>
+                  <button className="tz-change-btn" onClick={() => refetchAdmin()}>
+                    Обновить
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="account-delete-section">
         <p className="account-delete-note">

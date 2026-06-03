@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, getInitDataRaw } from './client'
-import type { TodayItem, IntakeIn, AdherenceResponse, StreakItem, Medication, MedicationIn, Dependent, StockInfo, UserSettings, WeekStatRow } from './types'
+import type { TodayItem, IntakeIn, AdherenceResponse, StreakItem, Medication, MedicationIn, Dependent, StockInfo, UserSettings, WeekStatRow, AdminStats } from './types'
 
 export function useToday() {
   return useQuery<TodayItem[]>({
@@ -198,8 +198,8 @@ export function useSetTimezoneByLocation() {
 
 export function useSetReminderMode() {
   const qc = useQueryClient()
-  return useMutation<void, Error, 'once' | 'repeat'>({
-    mutationFn: (mode) => api.put<void>('/settings/reminder-mode', { mode }),
+  return useMutation<void, Error, { mode: 'once' | 'repeat'; hours?: number }>({
+    mutationFn: (body) => api.put<void>('/settings/reminder-mode', body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   })
 }
@@ -260,6 +260,15 @@ export function useSendExport() {
 export function useDeleteAccount() {
   return useMutation<void, Error, void>({
     mutationFn: () => api.delete<void>('/settings/account'),
+  })
+}
+
+export function useAdminStats(enabled: boolean) {
+  return useQuery<AdminStats>({
+    queryKey: ['admin-stats'],
+    queryFn: () => api.get<AdminStats>('/admin/stats'),
+    enabled: enabled && !!getInitDataRaw(),
+    refetchInterval: 30_000,
   })
 }
 

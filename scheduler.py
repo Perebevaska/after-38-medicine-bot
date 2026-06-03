@@ -92,8 +92,8 @@ def clear_pending_for_medication(medication_id: int):
 
 
 def _prune_pending(now_utc: datetime):
-    """Удаляет из _pending записи старше 2 часов (защита от роста в режиме once)."""
-    cutoff = now_utc - timedelta(seconds=7200)
+    """Удаляет из _pending записи старше 12 часов (макс. окно repeat)."""
+    cutoff = now_utc - timedelta(seconds=43200)
     for key in [k for k, ts in _pending.items() if ts < cutoff]:
         del _pending[key]
 
@@ -140,9 +140,10 @@ async def send_reminders(app):
             should_send = True  # первая отправка: точная минута ИЛИ догон после пропуска
         elif row["reminder_mode"] == "repeat" and already:
             elapsed = (now_utc - _pending[key]).total_seconds()
-            if 300 <= elapsed < 7200:  # повтор каждые 5 мин, не дольше 2 часов
+            repeat_window = (row.get("reminder_repeat_hours") or 2) * 3600
+            if 300 <= elapsed < repeat_window:
                 should_send = True
-            elif elapsed >= 7200:
+            elif elapsed >= repeat_window:
                 _pending.pop(key, None)
 
         if not should_send:

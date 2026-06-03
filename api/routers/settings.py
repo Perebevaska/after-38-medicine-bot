@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import Literal, Optional
 import pytz
 from fastapi import APIRouter, Depends, HTTPException
@@ -34,6 +35,7 @@ class LocationIn(BaseModel):
 
 class ReminderModeIn(BaseModel):
     mode: Literal["once", "repeat"]
+    hours: Optional[int] = Field(default=None, ge=1, le=12)
 
 
 class PresetIn(BaseModel):
@@ -61,7 +63,10 @@ async def get_settings(telegram_id: int = Depends(require_telegram_user)):
     row = await asyncio.to_thread(db.get_user_settings_row, telegram_id)
     if not row:
         return {}
-    return dict(row)
+    result = dict(row)
+    admin_id = int(os.getenv("ADMIN_ID", "0"))
+    result["is_admin"] = bool(admin_id and telegram_id == admin_id)
+    return result
 
 
 @router.put("/timezone", status_code=204)
@@ -83,7 +88,7 @@ async def set_timezone_by_location(body: LocationIn, telegram_id: int = Depends(
 
 @router.put("/reminder-mode", status_code=204)
 async def set_reminder_mode(body: ReminderModeIn, telegram_id: int = Depends(require_telegram_user)):
-    await asyncio.to_thread(db.set_reminder_mode, telegram_id, body.mode)
+    await asyncio.to_thread(db.set_reminder_mode, telegram_id, body.mode, body.hours)
 
 
 @router.put("/presets/{slot}", status_code=204)
