@@ -9,7 +9,8 @@ from arq.connections import RedisSettings
 from redis import Redis as _RedisSync
 from database import (get_active_schedule_rows, log_intake, apply_intake_stock,
                       apply_intake_hearts, get_today_intake_statuses,
-                      get_schedules_by_medication, get_or_create_user, get_medication_by_id)
+                      get_schedules_by_medication, get_or_create_user, get_medication_by_id,
+                      get_caregiver_tids_for_dependent, get_dep_share_viewer_tids)
 from utils import escape_html, get_tz_for_user, local_day_bounds_utc
 # _rule_fires_today живёт в schedule_utils (чистая логика, без telegram/db);
 # реэкспорт для обратной совместимости: stats/export/timezone импортируют его отсюда.
@@ -298,6 +299,10 @@ async def _apply_strict_autoskip(schedules):
         threshold = int(hours * 60)
         start_utc, end_utc = local_day_bounds_utc(tz, now_local)
         statuses = await asyncio.to_thread(get_today_intake_statuses, tid, start_utc, end_utc)
+        # F10-C: опекуны владельца (F7) считаются один раз на юзера; viewer'ы (F8) — по dep_id.
+        caregiver_tids = await asyncio.to_thread(get_caregiver_tids_for_dependent, first["user_id"])
+        owner_label = f"@{first['owner_username']}" if first.get("owner_username") else "вашего близкого"
+        viewer_cache: dict = {}
 
         for r in rows:
             if not _rule_fires_today(r, today):
@@ -328,6 +333,32 @@ async def _apply_strict_autoskip(schedules):
                 )
             except Exception as e:
                 logger.error("strict autoskip enqueue error: %s", e)
+            # F10-C: пуш помощникам о пропуске приёма подопечного.
+            await _notify_caregivers_on_miss(r, caregiver_tids, owner_label, viewer_cache, hours)
+
+
+async def _notify_caregivers_on_miss(r, caregiver_tids, owner_label, viewer_cache, hours):
+    """Пуш помощникам, что приём подопечного пропущен (F7 опекуну / F8 наблюдателям)."""
+    med = escape_html(r["name"])
+    if r.get("dependent_id"):
+        # F8: локальный близкий → активные наблюдатели
+        dep_id = r["dependent_id"]
+        if dep_id not in viewer_cache:
+            viewer_cache[dep_id] = await asyncio.to_thread(get_dep_share_viewer_tids, dep_id)
+        targets = viewer_cache[dep_id]
+        who = escape_html(r["dependent_name"]) if r.get("dependent_name") else "близкого"
+        text = (f"⚠️ Пропущен приём <b>{med}</b> у «{who}» "
+                f"(прошло {hours} ч без отметки).")
+    else:
+        # F7: собственное лекарство подопечного-аккаунта → его опекуны
+        targets = caregiver_tids
+        text = (f"⚠️ Пропущен приём <b>{med}</b> у {owner_label} "
+                f"(прошло {hours} ч без отметки).")
+    for target_tid in targets:
+        try:
+            await _arq_pool.enqueue_job('send_reminder', chat_id=target_tid, text=text)
+        except Exception as e:
+            logger.error("miss-notify enqueue error: %s", e)
 
 
 async def handle_intake_callback(update, context):

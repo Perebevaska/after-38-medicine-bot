@@ -682,6 +682,30 @@ def is_active_dependent(telegram_id: int) -> bool:
         return row is not None
 
 
+def get_caregiver_tids_for_dependent(dependent_user_id: int) -> list:
+    """F10-C: telegram_id всех активных опекунов подопечного (для пуша о пропуске)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT c.telegram_id FROM caregiver_links cl "
+            "JOIN users c ON c.id = cl.caregiver_id "
+            "WHERE cl.dependent_id = %s AND cl.status = 'active'",
+            (dependent_user_id,)
+        ).fetchall()
+        return [r["telegram_id"] for r in rows]
+
+
+def get_dep_share_viewer_tids(dep_id: int) -> list:
+    """F10-C: telegram_id активных наблюдателей локального близкого (для пуша о пропуске)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT v.telegram_id FROM dependent_shares ds "
+            "JOIN users v ON v.id = ds.viewer_user_id "
+            "WHERE ds.dep_id = %s AND ds.status = 'active'",
+            (dep_id,)
+        ).fetchall()
+        return [r["telegram_id"] for r in rows]
+
+
 def get_linked_dependents_for_caregiver(caregiver_telegram_id: int) -> list:
     """Возвращает [{user_id, telegram_id, username}] активных подопечных опекуна.
     Возвращает пустой список если caregiver_enabled = 0 (режим выключен)."""
@@ -1277,10 +1301,12 @@ def get_active_schedule_rows() -> list:
     """
     with get_connection() as conn:
         return conn.execute(
-            f"""SELECT u.telegram_id, u.id AS user_id, u.timezone, u.reminder_mode,
+            f"""SELECT u.telegram_id, u.id AS user_id, u.username AS owner_username,
+                      u.timezone, u.reminder_mode,
                       u.daily_plan_enabled, u.daily_plan_time,
                       u.strict_mode, u.strict_mode_hours, u.reminder_repeat_hours,
                       m.id AS medication_id, m.name, m.dosage AS med_dosage, m.meal_relation,
+                      m.dependent_id AS dependent_id,
                       {_RULE_COLS}, sr.dosage AS rule_dosage,
                       d.name AS dependent_name
                FROM schedule_rules sr
