@@ -50,7 +50,8 @@ def test_menu_main_renders_menu(monkeypatch):
     text, markup = q.edits[-1]
     assert text == tz._main_menu_text("U")
     cbs = _callbacks(markup)
-    assert cbs == ["menu:today", "menu:meds", "menu:stats", "menu:settings", "menu:about"]
+    # F10-D: меню сведено к 3 пунктам (приложение / сегодня / о проекте)
+    assert cbs == ["menu:today", "menu:about"]
 
 
 def test_menu_about_has_back():
@@ -59,16 +60,6 @@ def test_menu_about_has_back():
     text, markup = q.edits[-1]
     assert text == ABOUT_TEXT
     assert "menu:main" in _callbacks(markup)
-
-
-def test_menu_stats_period_has_back():
-    q = FakeQuery("menu:stats")
-    run(tz.handle_menu_callback(FakeUpdate(q), None))
-    text, markup = q.edits[-1]
-    assert text == "Выбери период:"
-    cbs = _callbacks(markup)
-    assert "stats:week" in cbs and "stats:plan" in cbs
-    assert "menu:main" in cbs
 
 
 def test_back_menu_kb_points_to_main():

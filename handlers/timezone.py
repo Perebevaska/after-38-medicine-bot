@@ -34,13 +34,13 @@ MINIAPP_URL = "https://medbot.isgood.host"
 
 
 def _main_menu_keyboard():
-    """Inline-клавиатура главного меню."""
+    """Inline-клавиатура главного меню (F10-D: бот = напоминания + быстрая отметка).
+
+    Управление лекарствами, статистика, настройки и забота — в приложении.
+    """
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📱 Приложение", web_app=WebAppInfo(url=MINIAPP_URL))],
+        [InlineKeyboardButton("📱 Открыть приложение", web_app=WebAppInfo(url=MINIAPP_URL))],
         [InlineKeyboardButton("📋 Лекарства на сегодня", callback_data="menu:today")],
-        [InlineKeyboardButton("💊 Мои лекарства", callback_data="menu:meds")],
-        [InlineKeyboardButton("📊 Статистика", callback_data="menu:stats")],
-        [InlineKeyboardButton("⚙️ Настройки", callback_data="menu:settings")],
         [InlineKeyboardButton("ℹ️ О проекте", callback_data="menu:about")],
     ])
 
@@ -52,7 +52,12 @@ def back_menu_kb() -> InlineKeyboardMarkup:
 
 def _main_menu_text(first_name: str, hint: str = "") -> str:
     """Текст приветствия главного меню."""
-    text = f"Привет, {first_name}! 💊\n\nЯ помогу тебе не забывать принимать лекарства."
+    text = (
+        f"Привет, {first_name}! 💊\n\n"
+        "Я напоминаю о приёмах и принимаю отметки «выпил / пропустил».\n"
+        "Добавление лекарств, статистика, настройки и «Забота» — "
+        "в приложении 📱 (кнопка ниже)."
+    )
     if hint:
         text += f"\n\n{hint}"
     return text
@@ -190,23 +195,6 @@ async def handle_menu_callback(update, context):
             except Exception as e:
                 logger.error("take_all: ошибка для лекарства %s: %s", mid, e)
         await _render_today_screen(query, user)
-
-    elif action == "meds":
-        from handlers.meds import show_meds_list
-        await show_meds_list(msg, user)
-
-    elif action == "stats":
-        from handlers.stats import _stats_period_keyboard
-        await query.edit_message_text("Выбери период:", reply_markup=_stats_period_keyboard())
-
-    elif action == "settings":
-        from handlers.settings import _settings_text, _settings_keyboard, fetch_settings_data
-        tz, mode_label, presets, dp, cg = fetch_settings_data(user.id)
-        await query.edit_message_text(
-            _settings_text(tz, mode_label, presets, dp, cg),
-            parse_mode="HTML",
-            reply_markup=_settings_keyboard(mode_label, dp, cg, user.id)
-        )
 
     elif action == "about":
         await query.edit_message_text(
