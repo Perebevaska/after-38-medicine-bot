@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAdherence, useStreak, useSendExport, useWeekStats, useSettings } from '../api/hooks'
 import type { WeekStatRow, StreakItem } from '../api/types'
 
@@ -72,12 +72,16 @@ const REPORTS: ReportDef[] = [
 function ReportRow({ slot, icon, title }: ReportDef) {
   const { mutate, isPending, isError, reset } = useSendExport()
   const [sent, setSent] = useState(false)
+  const sentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (sentTimerRef.current) clearTimeout(sentTimerRef.current) }, [])
 
   const handleSend = () => {
     mutate(slot, {
       onSuccess: () => {
         setSent(true)
-        setTimeout(() => { setSent(false); reset() }, 3000)
+        if (sentTimerRef.current) clearTimeout(sentTimerRef.current)
+        sentTimerRef.current = setTimeout(() => { setSent(false); reset() }, 3000)
       },
     })
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Pencil, Pause, Play, Package, Trash2, Plus } from 'lucide-react'
 import { useMedications, useDeleteMedication, usePauseMedication } from '../api/hooks'
 import { apiErrorMessage } from '../api/client'
@@ -37,11 +37,15 @@ function MedCard({ med, onEdit }: { med: Medication; onEdit: (id: number) => voi
   const [isOpen, setIsOpen] = useState(false)
   const { mutate: del, isPending: delPending } = useDeleteMedication()
   const { mutate: pause, isPending: pausePending } = usePauseMedication()
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }, [])
 
   const open = () => { setView('actions'); setIsOpen(true) }
   const close = () => {
     setIsOpen(false)
-    setTimeout(() => setView('collapsed'), CLOSE_MS)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(() => setView('collapsed'), CLOSE_MS)
   }
   const toggle = () => (isOpen ? close() : open())
 

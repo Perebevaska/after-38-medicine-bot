@@ -1,4 +1,4 @@
-import { useState, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, X } from 'lucide-react'
 import { useToday, useLogIntake, useHearts } from '../api/hooks'
@@ -34,6 +34,15 @@ const WishCard = forwardRef<WishCardHandle>(function WishCard(_, ref) {
   const [particles, setParticles] = useState<HeartParticle[]>([])
   const [shaking, setShaking] = useState(false)
   const heartRef = useRef<HTMLSpanElement>(null)
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  useEffect(() => () => { timersRef.current.forEach(clearTimeout) }, [])
+
+  const addTimer = (fn: () => void, ms: number) => {
+    const id = setTimeout(fn, ms)
+    timersRef.current.push(id)
+    return id
+  }
   // G1: счётчик сердечек рядом с ❤️
   const { data: heartsData } = useHearts()
   const hearts = heartsData?.hearts ?? 0
@@ -60,7 +69,7 @@ const WishCard = forwardRef<WishCardHandle>(function WishCard(_, ref) {
     setParticles((p) => [...p, ...batch])
     const maxDur = Math.max(...batch.map((p) => p.dur)) + 60
     const ids = new Set(batch.map((p) => p.id))
-    setTimeout(() => setParticles((p) => p.filter((pt) => !ids.has(pt.id))), maxDur)
+    addTimer(() => setParticles((p) => p.filter((pt) => !ids.has(pt.id))), maxDur)
   }
 
   const celebrate = () => {
@@ -86,12 +95,12 @@ const WishCard = forwardRef<WishCardHandle>(function WishCard(_, ref) {
     setParticles((p) => [...p, ...batch])
     const maxDur = Math.max(...batch.map((p) => p.dur)) + 60
     const ids = new Set(batch.map((p) => p.id))
-    setTimeout(() => setParticles((p) => p.filter((pt) => !ids.has(pt.id))), maxDur)
+    addTimer(() => setParticles((p) => p.filter((pt) => !ids.has(pt.id))), maxDur)
   }
 
   const skipped = () => {
     setShaking(true)
-    setTimeout(() => setShaking(false), 580)
+    addTimer(() => setShaking(false), 580)
     spawnBrokenHearts()
   }
 
