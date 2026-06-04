@@ -14,6 +14,12 @@ import TimePicker from '../components/TimePicker'
 import { getThemePref, setThemePref, type ThemePref } from '../theme'
 import { resetOnboarding } from '../components/OnboardingTour'
 
+// Маска кода: только A-Z0-9, разбивка по 4 через «-», максимум 12 символов (XXXX-XXXX-XXXX)
+function formatCodeInput(raw: string): string {
+  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
+  return clean.match(/.{1,4}/g)?.join('-') ?? ''
+}
+
 function InfoTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLSpanElement>(null)
@@ -871,9 +877,10 @@ export default function SettingsPage() {
                       placeholder="XXXX-XXXX"
                       value={codeInput}
                       autoFocus
-                      onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                      onChange={(e) => setCodeInput(formatCodeInput(e.target.value))}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddCode()}
                       maxLength={14}
+                      inputMode="text"
                     />
                     <p className="caregiver-input-hint caregiver-input-hint--codes">
                       <span><b>XXXX-XXXX</b> — стать помощником пользователя</span>
