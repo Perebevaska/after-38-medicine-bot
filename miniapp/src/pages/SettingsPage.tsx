@@ -10,7 +10,10 @@ import {
   useRevokeDepShare, useLeaveDepShare,
 } from '../api/hooks'
 import TimePicker from '../components/TimePicker'
-import { getThemePref, setThemePref, type ThemePref } from '../theme'
+import {
+  getThemePref, setThemePref, getPaletteId, setPaletteId,
+  getCustomAccent, setCustomAccent, PALETTES, type ThemePref,
+} from '../theme'
 
 function InfoTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
@@ -127,6 +130,8 @@ export default function SettingsPage() {
   const deleteAccount = useDeleteAccount()
   const { data: adminStats, refetch: refetchAdmin } = useAdminStats(!!data?.is_admin)
   const [theme, setTheme] = useState<ThemePref>(getThemePref())
+  const [palette, setPalette] = useState<string>(getPaletteId())
+  const [customAccent, setCustomAccentState] = useState<string>(getCustomAccent())
   const [dailyPlanTime, setDailyPlanTime] = useState('08:00')
   const [planTimeEditing, setPlanTimeEditing] = useState(false)
   const [strictTime, setStrictTime] = useState('02:00')
@@ -325,25 +330,53 @@ export default function SettingsPage() {
 
       <h2 className="section-title">Внешний вид</h2>
       <p className="section-hint">
-        «Как в Telegram» подстраивается под светлую или тёмную тему вашего клиента.
+        Тема задаёт фон, палитра — акцентный цвет. «Как в Telegram» подстраивается под тему клиента.
       </p>
-      <div className="settings-block">
-        <div className="seg-ctrl seg-ctrl--freq" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-          {([
-            ['auto', 'Как в Telegram'],
-            ['light', '☀️ Светлая'],
-            ['dark', '🌙 Тёмная'],
-          ] as [ThemePref, string][]).map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              className={`seg-btn${theme === val ? ' seg-btn--active' : ''}`}
-              onClick={() => { setTheme(val); setThemePref(val) }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="theme-seg">
+        {([
+          ['auto', 'Как в Telegram'],
+          ['light', '☀️ Светлая'],
+          ['dark', '🌙 Тёмная'],
+        ] as [ThemePref, string][]).map(([val, label]) => (
+          <button
+            key={val}
+            type="button"
+            className={`seg-btn${theme === val ? ' seg-btn--active' : ''}`}
+            onClick={() => { setTheme(val); setThemePref(val) }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <p className="section-hint" style={{ marginTop: 14 }}>Палитра акцента</p>
+      <div className="palette-grid">
+        {PALETTES.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`palette-dot${palette === p.id ? ' palette-dot--active' : ''}`}
+            style={{ background: p.swatch }}
+            title={p.label}
+            aria-label={p.label}
+            onClick={() => { setPalette(p.id); setPaletteId(p.id) }}
+          />
+        ))}
+        <label
+          className={`palette-dot palette-dot--custom${palette === 'custom' ? ' palette-dot--active' : ''}`}
+          style={{ background: customAccent }}
+          title="Своя"
+        >
+          <input
+            type="color"
+            value={customAccent}
+            onChange={(e) => {
+              setCustomAccentState(e.target.value)
+              setCustomAccent(e.target.value)
+              setPalette('custom')
+            }}
+          />
+        </label>
       </div>
 
       <h2 className="section-title">Напоминания</h2>

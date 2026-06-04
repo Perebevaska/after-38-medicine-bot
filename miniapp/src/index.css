@@ -5,32 +5,18 @@
 }
 
 /*
- * Тёплая палитра «Коралл + крем» (Фаза 13).
- * Telegram-цвета больше не используются для фонов/акцента — всегда наш тёплый бренд.
- * Режим темы (auto/light/dark) → атрибут data-theme на <html> (см. theme.ts).
- * auto = тёплая палитра + light/dark по Telegram colorScheme.
+ * Палитра инъектируется из JS (theme.ts → applyTheme) в <html>.
+ * Значения ниже — фоллбэк до инициализации JS (режим «как в Telegram»), без FOUC.
  */
-
 :root {
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* LIGHT — крем + коралл (дефолт до инициализации JS) */
-:root,
-html[data-theme='light'] {
-  --accent: #e5715a;          /* коралл */
-  --bg: #fff9f4;              /* крем */
-  --card: #ffffff;
-  --secondary-bg: #f6ece3;    /* беж */
-  --text: #2b2320;
-  --hint: #9a8c82;
-  --separator: #ece0d5;
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --card: var(--tg-theme-bg-color, #ffffff);
+  --secondary-bg: var(--tg-theme-secondary-bg-color, #f1f3f5);
+  --text: var(--tg-theme-text-color, #000000);
+  --hint: var(--tg-theme-hint-color, #8e8e93);
+  --separator: var(--tg-theme-section-separator-color, rgba(0,0,0,0.08));
   --destructive: #d64c3c;
-
-  /* алиасы для существующих имён в App.css */
+  --accent: var(--tg-theme-button-color, #3390ec);
   --button-bg: var(--accent);
   --button-color: var(--accent);
   --button-text: #ffffff;
@@ -38,28 +24,10 @@ html[data-theme='light'] {
   --link: var(--accent);
   --link-color: var(--accent);
 
-  color: var(--text);
-  background: var(--bg);
-}
-
-/* DARK — тёплый уголь + коралл */
-html[data-theme='dark'] {
-  --accent: #f08a72;
-  --bg: #1c1815;             /* тёплый уголь */
-  --card: #262019;
-  --secondary-bg: #2e2620;
-  --text: #f2e9e1;
-  --hint: #a8978b;
-  --separator: #3a312a;
-  --destructive: #f0796a;
-
-  --button-bg: var(--accent);
-  --button-color: var(--accent);
-  --button-text: #1c1815;
-  --button-text-color: #1c1815;
-  --link: var(--accent);
-  --link-color: var(--accent);
-
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
   color: var(--text);
   background: var(--bg);
 }

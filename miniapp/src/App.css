@@ -1076,6 +1076,60 @@
   border-color: var(--button-bg);
 }
 
+/* Переключатель темы: 3 колонки, отступы как у контента, без клиппинга рамок */
+.theme-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 0 12px 4px;
+}
+.theme-seg .seg-btn {
+  border-color: var(--separator);
+}
+
+/* Палитра акцента: круглые свотчи */
+.palette-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 12px 4px;
+}
+.palette-dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--separator);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  transition: transform 0.12s;
+}
+.palette-dot--active {
+  border-color: var(--text);
+  transform: scale(1.12);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text);
+}
+.palette-dot--custom {
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.palette-dot--custom::after {
+  content: '✎';
+  font-size: 14px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.palette-dot--custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
 /* ── Schedule rule section ───────────────────────────────────────────────── */
 
 .rule-section {
