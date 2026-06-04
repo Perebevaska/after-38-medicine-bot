@@ -122,7 +122,7 @@ function AdherenceCard({ adherence }: { adherence: StatsOverview['adherence'] })
   return (
     <div className="stats-card adh-card">
       <h3 className="adh-title">Соблюдение приёма</h3>
-      <p className="adh-sub">Доля вовремя принятых лекарств от запланированных</p>
+      <p className="adh-sub">Доля вовремя принятых препаратов от запланированных</p>
       <div className="win-row">
         <WinCell label="7 дней" pct={windows['7']} />
         <WinCell label="30 дней" pct={windows['30']} />

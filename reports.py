@@ -270,7 +270,7 @@ def _build_doctor_pdf(subjects, days, start_day, today, period_str, gen_str) -> 
 # ── Standalone builders для API (возвращают BytesIO или None) ────────────────
 
 def build_plan_pdf(telegram_id: int) -> io.BytesIO | None:
-    """План лекарств на 7 дней. Возвращает BytesIO или None если нет данных."""
+    """План препаратов на 7 дней. Возвращает BytesIO или None если нет данных."""
     user_tz = get_tz_for_user(telegram_id)
     today = datetime.now(user_tz).date()
     rows = get_schedules_for_user(telegram_id)
@@ -298,7 +298,7 @@ def build_plan_pdf(telegram_id: int) -> io.BytesIO | None:
         sections.append((day_label, lines))
     if not sections:
         return None
-    title = "План лекарств на 7 дней"
+    title = "План препаратов на 7 дней"
     subtitle = f"с {today.strftime('%d.%m.%Y')} по {(today + timedelta(days=6)).strftime('%d.%m.%Y')}"
     return _build_pdf(title, subtitle, sections)
 
@@ -350,7 +350,7 @@ def build_adherence_pdf(telegram_id: int) -> io.BytesIO | None:
         for it in items
     ]
     overall = round(total_taken / total_planned * 100)
-    sections = [("Соблюдение по лекарствам", lines), (f"Итого: {total_taken}/{total_planned} ({overall}%)", [])]
+    sections = [("Соблюдение по препаратам", lines), (f"Итого: {total_taken}/{total_planned} ({overall}%)", [])]
     title, subtitle = "Соблюдение режима за 30 дней", f"с {start_day.strftime('%d.%m.%Y')} по {today.strftime('%d.%m.%Y')}"
     return _build_pdf(title, subtitle, sections)
 

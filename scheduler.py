@@ -162,7 +162,7 @@ async def _send_reminders_impl(app):
             {"text": "❌ Пропустить", "callback_data": f"skipped:{row['medication_id']}:{row['reminder_time']}"},
         ]]
         text = (
-            f"💊 Время принять лекарство!\n\n"
+            f"💊 Время принять препарат!\n\n"
             f"<b>{escape_html(row['name'])}</b>{dep_suffix} — {escape_html(dosage)}\n"
             f"🍽 Принимать {_MEAL_LABELS.get(row['meal_relation'], row['meal_relation'])}"
         )
@@ -251,7 +251,7 @@ async def _send_daily_plans(app, schedules):
             lines.append(f"💊 <b>{escape_html(med['name'])}</b>{dep_label}")
             for reminder_time, dosage in sorted(med["times"]):
                 lines.append(f"   ⏰ {reminder_time} — {escape_html(dosage)}{meal_str}")
-        lines.append("\nНе забудь взять лекарства с собой! 🎒")
+        lines.append("\nНе забудь взять препараты с собой! 🎒")
         lines.append("Продуктивного дня! 🚀")
 
         try:
@@ -432,7 +432,7 @@ async def _update_stock_on_intake(reply_fn, medication_id, new_status, old_statu
     if after is not None and after <= thr and (before is None or before > thr):
         user_id = await asyncio.to_thread(get_or_create_user, telegram_id)
         med = await asyncio.to_thread(get_medication_by_id, medication_id, user_id)
-        name = escape_html(med["name"]) if med else "Лекарство"
+        name = escape_html(med["name"]) if med else "Препарат"
         await reply_fn(
             f"⚠️ <b>{name}</b> скоро закончится: осталось примерно на {after} дн. ({qty:g} шт.).\n"
             f"Не забудь пополнить запас 📦",

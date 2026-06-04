@@ -400,13 +400,10 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (p: 'medication
         if (ownMeds.length === 0) {
           return (
             <div className="empty-state">
-              <div className="empty-state-emoji">💊</div>
-              <p className="empty-state-title">Пока нет лекарств</p>
-              <p className="empty-state-text">
-                Добавьте первое лекарство в Аптечке — и я начну напоминать о приёмах вовремя.
-              </p>
-              <button type="button" className="btn-primary" onClick={() => onNavigate?.('medications')}>
-                Перейти в Аптечку
+              <p className="empty-state-title">💊 Пока нет препаратов</p>
+              <p className="empty-state-text">Добавьте первый — и я напомню о приёмах вовремя.</p>
+              <button type="button" className="empty-state-link" onClick={() => onNavigate?.('medications')}>
+                В Аптечку →
               </button>
             </div>
           )
@@ -414,13 +411,10 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (p: 'medication
         if (ownMeds.every((m) => m.paused)) {
           return (
             <div className="empty-state">
-              <div className="empty-state-emoji">⏸️</div>
-              <p className="empty-state-title">Все лекарства на паузе</p>
-              <p className="empty-state-text">
-                Напоминания не приходят. Снимите паузу в Аптечке, когда будете готовы продолжить.
-              </p>
-              <button type="button" className="btn-primary" onClick={() => onNavigate?.('medications')}>
-                Открыть Аптечку
+              <p className="empty-state-title">⏸️ Все препараты на паузе</p>
+              <p className="empty-state-text">Напоминания не приходят. Снимите паузу, когда будете готовы.</p>
+              <button type="button" className="empty-state-link" onClick={() => onNavigate?.('medications')}>
+                В Аптечку →
               </button>
             </div>
           )

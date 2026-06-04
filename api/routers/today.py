@@ -112,14 +112,14 @@ async def log_intake(body: IntakeIn, user: TelegramUser = Depends(require_db_use
     med = await asyncio.to_thread(db.get_medication_by_id_raw, body.medication_id)
     owner_user_id = med["user_id"] if med else None
     if not med:
-        raise HTTPException(404, "Лекарство не найдено")
+        raise HTTPException(404, "Препарат не найден")
     # Доступ: собственное лекарство ИЛИ лекарство shared-близкого (помощник №2
     # отмечает приём за локального близкого — у того нет своего аккаунта).
     if owner_user_id != user.user_id:
         viewer_deps = await asyncio.to_thread(db.get_viewer_shared_deps, user.user_id)
         viewer_dep_ids = {vd["dep_id"] for vd in viewer_deps}
         if med.get("dependent_id") not in viewer_dep_ids:
-            raise HTTPException(404, "Лекарство не найдено")
+            raise HTTPException(404, "Препарат не найден")
     # День считаем в TZ владельца лекарства (расписание строится в его TZ).
     owner_tid = (
         user.telegram_id if owner_user_id == user.user_id

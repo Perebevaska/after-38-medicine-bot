@@ -211,7 +211,7 @@ async def create_medication(body: MedicationIn, user: TelegramUser = Depends(req
         dep_id = body.dependent_id
     count = await asyncio.to_thread(db.count_active_medications, target_user_id, dep_id)
     if count >= MAX_MEDICATIONS_PER_USER:
-        raise HTTPException(400, f"Лимит {MAX_MEDICATIONS_PER_USER} лекарств достигнут")
+        raise HTTPException(400, f"Лимит {MAX_MEDICATIONS_PER_USER} препаратов достигнут")
     med_id = await asyncio.to_thread(
         db.add_medication, target_user_id, body.name, body.dosage,
         body.meal_relation, body.times_per_day, dep_id,
@@ -242,7 +242,7 @@ async def _resolve_med(med_id: int, user: TelegramUser):
         med = await asyncio.to_thread(db.get_medication_by_id_raw, med_id)
         if med and med.get("dependent_id") in viewer_dep_ids:
             return med
-    raise HTTPException(404, "Лекарство не найдено")
+    raise HTTPException(404, "Препарат не найден")
 
 
 @router.put("/{med_id}")

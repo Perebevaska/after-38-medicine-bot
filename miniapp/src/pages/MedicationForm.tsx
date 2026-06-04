@@ -457,7 +457,7 @@ export default function MedicationForm({ editId, linkedUserId, forDepShareId, op
       <div className="form-header">
         <button className="form-back-btn" onClick={onBack} type="button">←</button>
         <h1 className="form-title">
-          {editId != null ? 'Лекарство' : 'Новое лекарство'}
+          {editId != null ? 'Препарат' : 'Новый препарат'}
         </h1>
       </div>
 
@@ -565,7 +565,7 @@ export default function MedicationForm({ editId, linkedUserId, forDepShareId, op
           )}
           {doseWarn && (
             <span className="field-warn">
-              ⚠️ Купили упаковку с другой дозировкой? Лучше создайте новое лекарство — так история и запас не смешаются.
+              ⚠️ Купили упаковку с другой дозировкой? Лучше создайте новый препарат — так история и запас не смешаются.
             </span>
           )}
         </div>
@@ -685,7 +685,7 @@ export default function MedicationForm({ editId, linkedUserId, forDepShareId, op
             <button type="button" className="schedule-remove-btn" onClick={() => setScheduleOn(false)}>
               🗑 Удалить расписание
             </button>
-            <span className="field-hint">Лекарство останется в аптечке без напоминаний. Расписание можно добавить снова.</span>
+            <span className="field-hint">Препарат останется без напоминаний. Расписание можно добавить снова.</span>
           </>
         ) : (
           <div className="form-section">

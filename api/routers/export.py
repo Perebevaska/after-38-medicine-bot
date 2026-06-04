@@ -67,7 +67,7 @@ async def export_week(telegram_id: int = Depends(require_telegram_user)):
 async def export_adherence_pdf(telegram_id: int = Depends(require_telegram_user)):
     buf = await _build("adherence", telegram_id)
     if not buf:
-        raise HTTPException(404, "Нет активных лекарств")
+        raise HTTPException(404, "Нет активных препаратов")
     return _stream(buf, "adherence.pdf")
 
 

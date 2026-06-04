@@ -43,7 +43,7 @@ class ThresholdSet(BaseModel):
 async def _get_med_or_404(med_id: int, user_id: int):
     med = await asyncio.to_thread(db.get_medication_by_id, med_id, user_id)
     if not med:
-        raise HTTPException(404, "Лекарство не найдено")
+        raise HTTPException(404, "Препарат не найден")
     return med
 
 

@@ -35,7 +35,7 @@ def _main_menu_keyboard():
     """
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📱 Открыть приложение", web_app=WebAppInfo(url=MINIAPP_URL))],
-        [InlineKeyboardButton("📋 Лекарства на сегодня", callback_data="menu:today")],
+        [InlineKeyboardButton("📋 Препараты на сегодня", callback_data="menu:today")],
         [InlineKeyboardButton("ℹ️ О проекте", callback_data="menu:about")],
     ])
 
@@ -49,8 +49,8 @@ def _main_menu_text(first_name: str, hint: str = "") -> str:
     """Текст приветствия главного меню."""
     text = (
         f"Привет, {first_name}! 💊\n\n"
-        "Напоминаю вовремя принять лекарства и отмечаю приёмы одним касанием.\n"
-        "Добавление лекарств, статистика, настройки и «Забота» — "
+        "Напоминаю вовремя принять препараты и отмечаю приёмы одним касанием.\n"
+        "Добавление препаратов, статистика, настройки и «Забота» — "
         "в приложении 📱 (кнопка ниже)."
     )
     if hint:
@@ -116,13 +116,13 @@ async def _render_today_screen(query, user):
         meds[mid]["times"].append((row["reminder_time"], mid, dosage))
     if not meds:
         await query.edit_message_text(
-            "💊 Сегодня нет запланированных лекарств.",
+            "💊 Сегодня нет запланированных препаратов.",
             reply_markup=back_menu_kb()
         )
         return
     start_utc, end_utc = local_day_bounds_utc(user_tz, now_local)
     statuses = get_today_intake_statuses(user.id, start_utc, end_utc)
-    lines = ["📋 <b>Лекарства на сегодня:</b>\n"]
+    lines = ["📋 <b>Препараты на сегодня:</b>\n"]
     pending_list = []
     for med in meds.values():
         meal = _MEAL_LABELS.get(med["meal_relation"], "")
@@ -261,7 +261,7 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove()
         )
         await show_main_menu(update, update.effective_user.first_name,
-                             hint="Открой 📱 <b>приложение</b> (кнопка ниже), чтобы добавить первое лекарство.")
+                             hint="Открой 📱 <b>приложение</b> (кнопка ниже), чтобы добавить первый препарат.")
         return ConversationHandler.END
     await update.message.reply_text(
         "Не удалось определить часовой пояс. Введи город:",
@@ -289,7 +289,7 @@ async def handle_city_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=ReplyKeyboardRemove()
             )
             await show_main_menu(update, update.effective_user.first_name,
-                                 hint="Открой 📱 <b>приложение</b> (кнопка ниже), чтобы добавить первое лекарство.")
+                                 hint="Открой 📱 <b>приложение</b> (кнопка ниже), чтобы добавить первый препарат.")
             return ConversationHandler.END
     await update.message.reply_text("Город не найден. Попробуй ещё раз:")
     return SETUP_CITY

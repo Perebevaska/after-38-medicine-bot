@@ -243,9 +243,9 @@ export default function MedicationList({ onAdd, onEdit, onSchedule }: Props) {
 
       {data && !hasAny && (
         <div className="mlist-empty">
-          <p className="mlist-empty-text">Аптечка пуста</p>
+          <p className="mlist-empty-text">Здесь пока пусто</p>
           <button className="btn-primary" onClick={() => onAdd()}>
-            Добавить в аптечку
+            Добавить препарат
           </button>
         </div>
       )}
@@ -323,7 +323,7 @@ export default function MedicationList({ onAdd, onEdit, onSchedule }: Props) {
                 ))}
               </div>
             ) : (
-              <p className="hint mlist-section-empty">Нет лекарств. Добавьте через «+» сверху.</p>
+              <p className="hint mlist-section-empty">Нет препаратов. Добавьте через «+» сверху.</p>
             )}
           </div>
         )

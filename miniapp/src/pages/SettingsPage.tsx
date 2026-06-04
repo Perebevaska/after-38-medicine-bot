@@ -773,8 +773,8 @@ export default function SettingsPage() {
                         <div className="dep-share-panel">
                           <p className="dep-share-hint">
                             {hasViewer
-                              ? `@${share!.active_viewer!.username} имеет доступ к «${d.name}» и может управлять его лекарствами`
-                              : `Передайте код тому, кто хочет помогать с «${d.name}» — он сможет добавлять и редактировать лекарства`}
+                              ? `@${share!.active_viewer!.username} имеет доступ к «${d.name}» и может управлять его препаратами`
+                              : `Передайте код тому, кто хочет помогать с «${d.name}» — он сможет добавлять и редактировать препараты`}
                           </p>
                           {share?.active_viewer && (
                             <div className="settings-row">
@@ -991,7 +991,7 @@ export default function SettingsPage() {
 
       <h2 className="section-title">Часовой пояс</h2>
       <p className="section-hint">
-        Используется для точного расчёта времени напоминаний о приёме лекарств.
+        Используется для точного расчёта времени напоминаний о приёме препаратов.
         Укажи свой город или выбери по геолокации.
       </p>
       <div className="settings-block">
@@ -1129,7 +1129,7 @@ export default function SettingsPage() {
                   <span className="admin-stat-val">{adminStats.total_users}</span>
                 </div>
                 <div className="settings-row">
-                  <span className="settings-label">Лекарств активных</span>
+                  <span className="settings-label">Препаратов активных</span>
                   <span className="admin-stat-val">{adminStats.total_meds}</span>
                 </div>
                 <div className="settings-row">
@@ -1150,8 +1150,8 @@ export default function SettingsPage() {
 
       <div className="account-delete-section">
         <p className="account-delete-note">
-          Мы храним твой Telegram ID, никнейм и список лекарств.
-          Хочешь сделать перерыв — лучше поставь лекарства на паузу, данные сохранятся.
+          Мы храним твой Telegram ID, никнейм и список препаратов.
+          Хочешь сделать перерыв — лучше поставь препараты на паузу, данные сохранятся.
         </p>
         {deleted ? (
           <p className="account-deleted-msg">Данные удалены. До свидания 👋</p>
@@ -1178,7 +1178,7 @@ export default function SettingsPage() {
         ) : (
           <div className="account-delete-confirm">
             <p className="account-delete-warn">
-              Лекарства, история приёмов и расписание исчезнут навсегда.
+              Препараты, история приёмов и расписание исчезнут навсегда.
             </p>
             {deleteAccount.isError && (
               <p className="hint error hint-error--inline">
