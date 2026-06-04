@@ -1763,30 +1763,26 @@
 .ach-badge--sel { border-color: var(--accent, #4caf50); }
 .ach-name { font-size: 11px; font-weight: 500; line-height: 1.2; }
 
-/* Ф18: медальон ачивки — круг с градиентом уровня + глиф */
+/* Ф18: плитка ачивки — squircle, плоский тон уровня + белый глиф */
 .ach-medal {
   width: 50px;
   height: 50px;
-  border-radius: 50%;
+  border-radius: 15px;
   display: grid;
   place-items: center;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.30);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.20),
-    inset 0 1px 1.5px rgba(255, 255, 255, 0.45),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
-.ach-medal svg { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.30)); }
-.ach-medal--lg { width: 56px; height: 56px; }
-.ach-medal--bronze  { background: linear-gradient(145deg, #e6a972, #a85e2e); }
-.ach-medal--silver  { background: linear-gradient(145deg, #e3e9ef, #97a1ab); }
-.ach-medal--gold    { background: linear-gradient(145deg, #f7d670, #d39a23); }
-.ach-medal--diamond { background: linear-gradient(145deg, #c4ecf6, #4fb3c7); }
-.ach-medal--care    { background: linear-gradient(145deg, #5cc4d6, #2b8a9e); }
+.ach-medal svg { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18)); }
+.ach-medal--lg { width: 56px; height: 56px; border-radius: 17px; }
+.ach-medal--bronze  { background: #b87a44; }
+.ach-medal--silver  { background: #9aa3ad; }
+.ach-medal--gold    { background: #cb9b2e; }
+.ach-medal--diamond { background: #45b0c4; }
+.ach-medal--care    { background: #2b8a9e; }
 .ach-medal--locked {
   background: var(--secondary-bg);
   color: var(--hint);
-  border-color: transparent;
   box-shadow: inset 0 0 0 1px var(--separator);
 }
 .ach-medal--locked svg { filter: none; }
