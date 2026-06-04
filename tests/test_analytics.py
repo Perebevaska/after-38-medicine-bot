@@ -76,7 +76,6 @@ def test_punctuality_metrics_and_worst_hour():
     assert r["sample"] == 2
     assert r["ontime_pct"] == 50          # +10 вовремя, +50 поздно
     assert r["late_pct"] == 50
-    assert r["early_pct"] == 0
     assert r["avg_delay_min"] == 30       # (10+50)/2
     assert r["worst_hour"] == 21
     assert r["worst_hour_skip_pct"] == 100

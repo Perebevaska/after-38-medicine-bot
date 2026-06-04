@@ -164,10 +164,9 @@ function PunctualityCard({ punct }: { punct: StatsOverview['punctuality'] }) {
       {hasDist ? (
         <>
           <p className="punct-sub">Когда отмечаешь приём относительно плана:</p>
-          <DistRow label="Раньше" pct={punct.early_pct!} color="#42a5f5" />
           <DistRow label="Вовремя" pct={punct.ontime_pct!} color="#4caf50" />
           <DistRow label="Позже" pct={punct.late_pct!} color="#ff9800" />
-          <p className="punct-hint">«Вовремя» — в пределах ±30 мин от планового времени</p>
+          <p className="punct-hint">«Вовремя» — в течение 30 мин после напоминания; «Позже» — спустя 30 мин</p>
         </>
       ) : (
         <p className="punct-sub">Пока мало отметок для распределения</p>

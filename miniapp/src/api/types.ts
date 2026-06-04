@@ -57,7 +57,6 @@ export interface StatsOverview {
   }
   punctuality: {
     sample: number
-    early_pct: number | null
     ontime_pct: number | null
     late_pct: number | null
     avg_delay_min: number | null

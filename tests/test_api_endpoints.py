@@ -171,7 +171,7 @@ def test_stats_overview_shape(api_client, db):
     assert isinstance(body["adherence"]["weekly"], list)
     assert body["load"]["meds"] == 1
     assert set(body["punctuality"]) == {
-        "sample", "early_pct", "ontime_pct", "late_pct", "avg_delay_min",
+        "sample", "ontime_pct", "late_pct", "avg_delay_min",
         "worst_hour", "worst_hour_skip_pct"}
 
 

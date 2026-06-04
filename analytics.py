@@ -133,8 +133,9 @@ def punctuality(intakes: list, user_tz, min_sample: int = 10) -> dict:
     """Пунктуальность ОТМЕТОК: отклонение нажатия от планового времени.
 
     intakes — [{scheduled_time, status, taken_at}]. Возвращает
-    {sample, within30_pct, avg_delay_min, worst_hour, worst_hour_skip_pct}.
-    within30/avg_delay = None пока sample < min_sample (мало данных — не врём).
+    {sample, ontime_pct, late_pct, avg_delay_min, worst_hour, worst_hour_skip_pct}.
+    ontime = отметка ≤30 мин после плана (включая раньше); late = >30 мин.
+    ontime/late/avg_delay = None пока sample < min_sample (мало данных — не врём).
     worst_hour — плановый час с макс долей skipped (≥3 приёма в часе, есть skip).
     """
     delays = []
@@ -158,15 +159,14 @@ def punctuality(intakes: list, user_tz, min_sample: int = 10) -> dict:
         worst_hour = max(cand, key=lambda h: (cand[h], h))
         worst_pct = round(cand[worst_hour] * 100)
     if sample < min_sample:
-        return {"sample": sample, "early_pct": None, "ontime_pct": None,
+        return {"sample": sample, "ontime_pct": None,
                 "late_pct": None, "avg_delay_min": None,
                 "worst_hour": worst_hour, "worst_hour_skip_pct": worst_pct}
-    early = sum(1 for d in delays if d < -30)
+    # «Вовремя» = отметка в пределах 30 мин после плана (раньше тоже ок).
     late = sum(1 for d in delays if d > 30)
-    ontime = sample - early - late
+    ontime = sample - late
     return {
         "sample": sample,
-        "early_pct": round(100 * early / sample),
         "ontime_pct": round(100 * ontime / sample),
         "late_pct": round(100 * late / sample),
         "avg_delay_min": round(sum(delays) / sample),
