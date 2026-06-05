@@ -1320,13 +1320,28 @@
   inset: 0;
   z-index: 1000;
 }
-.tour-spot {
+/* Интерактивный шаг: события проходят сквозь оверлей к подсвеченному элементу
+   (юзер свайпает карточку). Карточка тура остаётся кликабельной. */
+.tour-overlay--interactive { pointer-events: none; }
+.tour-overlay--interactive .tour-card { pointer-events: auto; }
+/* Затемнение с N дырками — через SVG-маску (box-shadow не складывается для 2+). */
+.tour-mask {
   position: fixed;
-  border-radius: 14px;
-  border: 2px solid var(--accent);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.72);
+  inset: 0;
+  z-index: 1000;
   pointer-events: none;
-  transition: left 0.25s, top 0.25s, width 0.25s, height 0.25s;
+}
+/* Акцентная рамка вокруг каждой дырки — пульсирующее свечение для привлечения внимания */
+.tour-ring {
+  position: fixed;
+  z-index: 1000;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+  animation: tour-ring-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tour-ring-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
 }
 .tour-card {
   position: fixed;
@@ -1347,6 +1362,7 @@
 .tour-step-count { font-size: 12px; color: var(--hint); margin-bottom: 4px; }
 .tour-title { font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
 .tour-text { font-size: 14px; color: var(--text); line-height: 1.45; margin-bottom: 14px; }
+.tour-success { color: #4caf50; font-weight: 700; }
 .tour-actions { display: flex; justify-content: space-between; align-items: center; }
 .tour-nav-btns { display: flex; align-items: center; gap: 8px; }
 .tour-skip {

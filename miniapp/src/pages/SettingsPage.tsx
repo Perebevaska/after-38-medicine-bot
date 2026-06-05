@@ -561,7 +561,8 @@ export default function SettingsPage({ onReplayTour }: { onReplayTour?: () => vo
         ))}
       </div>
 
-      <h2 className="section-title" id="tour-care">Забота</h2>
+      <div id="tour-care-section">
+      <h2 className="section-title">Забота</h2>
       <p className="section-hint">
         Следите за приёмами близких и управляйте их аптечкой прямо из приложения. Другой пользователь бота может стать вашим помощником или взять заботу о конкретном близком.
       </p>
@@ -1011,6 +1012,7 @@ export default function SettingsPage({ onReplayTour }: { onReplayTour?: () => vo
           )}
         </>
       )}
+      </div>
 
       <h2 className="section-title">Часовой пояс</h2>
       <p className="section-hint">

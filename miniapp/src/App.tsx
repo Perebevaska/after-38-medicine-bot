@@ -173,16 +173,9 @@ export default function App() {
     }
   }, [])
 
-  // Новый юзер (тур показывается) → создаём демо-препарат «Счастьепин», чтобы
-  // туру было что показать на «Аптечке»/«Приёмах». Идемпотентно на сервере.
+  // Демо-препарат «Счастьепин» создаётся при запуске обучения (mount тура),
+  // чтобы туру было что показать на «Аптечке»/«Приёмах». Идемпотентно на сервере.
   const createDemo = useCreateDemoMed()
-  const demoFired = useRef(false)
-  useEffect(() => {
-    if (showTour && !demoFired.current) {
-      demoFired.current = true
-      createDemo.mutate()
-    }
-  }, [showTour, createDemo])
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
@@ -257,7 +250,7 @@ export default function App() {
           }
         }}
       />
-      {showTour && !showForm && <OnboardingTour onClose={() => setShowTour(false)} onNavigate={setNavPage} />}
+      {showTour && !showForm && <OnboardingTour onClose={() => setShowTour(false)} onNavigate={setNavPage} onStart={() => createDemo.mutate()} />}
       <AchievementToast />
     </div>
   )

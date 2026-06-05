@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // Онбординг-тур первого запуска. Переключает активную вкладку под каждый шаг,
 // подсвечивает пункт нав-бара ИЛИ элемент(ы) внутри страницы (по селектору,
@@ -17,21 +17,22 @@ interface Step {
   title: string
   text: string
   card?: 'top' | 'bottom' // принудительное положение карточки (иначе авто)
+  interactive?: boolean   // пропускать события сквозь оверлей (юзер взаимодействует с элементом)
 }
 
 const STEPS: Step[] = [
   { tab: 'medications', target: ['.mlist-add-btn', '.mlist-card'], card: 'bottom', title: 'Аптечка',
     text: 'Здесь все препараты. Добавляйте новые кнопкой «+» сверху. Для примера мы уже добавили демо-препарат «Счастьепин».' },
-  { tab: 'dashboard', target: '.mlist-card', card: 'bottom', title: 'Приёмы',
-    text: 'Экран дня. Отмечайте принятые приёмы — сдвиньте зелёный бегунок вправо. Попробуйте на «Счастьепине».' },
+  { tab: 'dashboard', target: '.mlist-card', card: 'bottom', interactive: true, title: 'Приёмы',
+    text: 'Экран дня. Отмечайте принятые приёмы — сдвиньте зелёный бегунок вправо прямо сейчас на «Счастьепине».' },
   { tab: 'stats', target: '.streak-card', card: 'bottom', title: 'Прогресс',
     text: 'Серия без пропусков — сколько дней подряд вы принимаете препараты вовремя.' },
   { tab: 'stats', target: '#tour-reports', title: 'Отчёты',
     text: 'Выгрузка PDF: расписание на неделю, история приёмов, отчёт для врача — файл придёт прямо в чат с ботом.' },
   { tab: 'settings', target: 'nav', title: 'Настройки',
     text: 'Напоминания, тема оформления, часовой пояс и забота о близких.' },
-  { tab: 'settings', target: '#tour-care', card: 'top', title: 'Забота',
-    text: 'Режим «Забота»: следите за приёмами близких и управляйте их аптечкой — или дайте код помощнику, чтобы он помогал вам.' },
+  { tab: 'settings', target: '#tour-care-section', card: 'top', title: 'Забота',
+    text: 'Режим «Забота»: следите за приёмами близких и ведите их аптечку — или поделитесь своим кодом, чтобы кто-то приглядывал за вами.' },
 ]
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -50,43 +51,64 @@ interface Rect { left: number; top: number; width: number; height: number }
 export default function OnboardingTour({
   onClose,
   onNavigate,
+  onStart,
 }: {
   onClose: () => void
   onNavigate: (p: NavPage) => void
+  onStart?: () => void // вызывается один раз при запуске тура (создание демо-препарата)
 }) {
   const [step, setStep] = useState(0)
-  const [rect, setRect] = useState<Rect | null>(null)
+  const [rect, setRect] = useState<Rect | null>(null)      // контент (in-page)
+  const [navRect, setNavRect] = useState<Rect | null>(null) // пункт нав-бара текущей вкладки
+  const [succeeded, setSucceeded] = useState(false)        // интерактивный шаг: действие выполнено
+  const lastTab = useRef<NavPage | null>(null)
   const cur = STEPS[step]
   const isNav = cur.target === 'nav'
 
-  // Принудительный сброс положения окон (скролл всех панелей) при старте тура —
-  // иначе элемент шага может оказаться за пределами видимой области и не подсветиться.
+  // Запуск тура: создаём демо-препарат + принудительно сбрасываем положение окон
+  // (скролл всех панелей) — иначе элемент шага может быть вне видимой зоны.
   useEffect(() => {
+    onStart?.()
     document.querySelectorAll('.tab-panel').forEach((p) => { (p as HTMLElement).scrollTop = 0 })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     onNavigate(cur.tab)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSucceeded(false)
+    const tabChanged = lastTab.current !== cur.tab
+    lastTab.current = cur.tab
     let cancelled = false
     let raf = 0
+    let takenPoll = 0
     const panelIdx = NAV_ORDER.indexOf(cur.tab)
 
-    const getEls = (): HTMLElement[] => {
-      if (cur.target === 'nav') {
-        const items = document.querySelectorAll('.bottom-nav .nav-item')
-        const navEl = items[panelIdx] as HTMLElement | undefined
-        const icon = navEl?.querySelector('svg') as unknown as HTMLElement | null
-        return icon ? [icon] : navEl ? [navEl] : []
-      }
+    const rectOf = (el: HTMLElement): Rect => {
+      const x = el.getBoundingClientRect()
+      return { left: x.left, top: x.top, width: x.width, height: x.height }
+    }
+
+    // Пункт нав-бара текущей вкладки (статичен) — подсвечиваем всегда, параллельно
+    // с контентом (вторая «дырка» маски).
+    const measureNav = () => {
+      if (cancelled) return
+      const items = document.querySelectorAll('.bottom-nav .nav-item')
+      const navEl = items[panelIdx] as HTMLElement | undefined
+      const icon = (navEl?.querySelector('svg') as unknown as HTMLElement | null) ?? navEl ?? null
+      setNavRect(icon ? rectOf(icon) : null)
+    }
+
+    const getContentEls = (): HTMLElement[] => {
       const panel = document.querySelectorAll('.tab-panel')[panelIdx] as HTMLElement | undefined
       const root: ParentNode = panel ?? document
-      const sels = Array.isArray(cur.target) ? cur.target : [cur.target]
+      const sels = Array.isArray(cur.target) ? cur.target : [cur.target as string]
       return sels
         .map((s) => root.querySelector(s) as HTMLElement | null)
         .filter((e): e is HTMLElement => !!e)
     }
 
-    const commit = (els: HTMLElement[]) => {
+    const commitContent = (els: HTMLElement[]) => {
       if (cancelled) return
       if (!els.length) { setRect(null); return }
       let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity
@@ -98,37 +120,52 @@ export default function OnboardingTour({
       setRect({ left: l, top: t, width: r - l, height: b - t })
     }
 
-    let scrolled = false
+    // Поллим появление элемента (смена вкладки / дозагрузка демо-мед). Скролл —
+    // МГНОВЕННЫЙ (behavior:'auto'): подсветка не гонится за анимацией = нет лага.
     const tryMeasure = (deadline: number) => {
       if (cancelled) return
-      const els = getEls()
+      const els = getContentEls()
       if (els.length) {
-        if (isNav) { commit(els); return }
-        if (!scrolled) {
-          scrolled = true
-          els[0].scrollIntoView({ block: 'center', behavior: 'smooth' })
-          // домеряем после settle скролла (smooth ~ до ~500мс)
-          window.setTimeout(() => commit(getEls()), 420)
-          window.setTimeout(() => commit(getEls()), 760)
-        }
-        commit(els)
+        els[0].scrollIntoView({ block: 'center', behavior: 'auto' })
+        commitContent(els)
+        raf = requestAnimationFrame(() => { if (!cancelled) { commitContent(getContentEls()); measureNav() } })
         return
       }
-      // элемент ещё не отрисован (смена вкладки / дозагрузка демо-мед) — поллим
       if (Date.now() < deadline) raf = requestAnimationFrame(() => tryMeasure(deadline))
       else setRect(null)
     }
 
-    const start = window.setTimeout(() => tryMeasure(Date.now() + 1800), isNav ? 60 : 100)
-    const onResize = () => commit(getEls())
+    const run = () => {
+      measureNav()
+      if (isNav) { setRect(null); return }
+      tryMeasure(Date.now() + 1800)
+    }
+
+    // Интерактивный шаг: поллим панель на появление принятой карточки → «Отлично!».
+    // Поллинг (а не observer одной ноды) устойчив к ре-рендеру/реордеру карточки.
+    if (cur.interactive) {
+      takenPoll = window.setInterval(() => {
+        const panel = document.querySelectorAll('.tab-panel')[panelIdx] as HTMLElement | undefined
+        if (panel?.querySelector('.mlist-card--taken')) {
+          setSucceeded(true)
+          clearInterval(takenPoll)
+        }
+      }, 300)
+    }
+
+    // Ждём оседания translateX вкладки ТОЛЬКО при смене таба (анимация 0.28с).
+    const settle = isNav ? 0 : (tabChanged ? 320 : 30)
+    const start = window.setTimeout(run, settle)
+    const onResize = () => { measureNav(); if (!isNav) commitContent(getContentEls()) }
     window.addEventListener('resize', onResize)
     return () => {
       cancelled = true
       clearTimeout(start)
       cancelAnimationFrame(raf)
+      clearInterval(takenPoll)
       window.removeEventListener('resize', onResize)
     }
-  }, [step, cur.tab, cur.target, isNav, onNavigate])
+  }, [step, cur.tab, cur.target, cur.interactive, isNav, onNavigate])
 
   const finish = () => {
     localStorage.setItem(KEY, '1')
@@ -138,26 +175,52 @@ export default function OnboardingTour({
   const next = () => (step < STEPS.length - 1 ? setStep((s) => s + 1) : finish())
   const back = () => setStep((s) => Math.max(0, s - 1))
 
-  const pad = isNav ? 13 : 8
   const cardPlace = cur.card ?? (rect && rect.top + rect.height / 2 > window.innerHeight * 0.55 ? 'top' : 'bottom')
 
+  // Дырки маски: пункт нав-бара (pad 13) + контентный элемент (pad 8). Несколько
+  // дырок реализованы через SVG-маску (box-shadow не складывается для 2+ отверстий).
+  const RADIUS = 14
+  const holes: { left: number; top: number; width: number; height: number }[] = []
+  if (navRect) holes.push({ left: navRect.left - 13, top: navRect.top - 13, width: navRect.width + 26, height: navRect.height + 26 })
+  if (rect && !isNav) {
+    // Кламп контентной дырки в видимую зону (над плавающим нав-баром / под верхом),
+    // иначе высокие/нижние блоки (Отчёты, Забота) вылезают за границы экрана.
+    const vh = window.innerHeight, vw = window.innerWidth
+    const SAFE_TOP = 8, NAV_RESERVE = 96
+    const l = Math.max(4, rect.left - 8)
+    const t = Math.max(SAFE_TOP, rect.top - 8)
+    const r = Math.min(vw - 4, rect.left + rect.width + 8)
+    const b = Math.min(vh - NAV_RESERVE, rect.top + rect.height + 8)
+    if (b > t && r > l) holes.push({ left: l, top: t, width: r - l, height: b - t })
+  }
+
   return (
-    <div className="tour-overlay" onClick={next}>
-      {rect && (
+    <div className={`tour-overlay${cur.interactive ? ' tour-overlay--interactive' : ''}`} onClick={cur.interactive ? undefined : next}>
+      <svg className="tour-mask" width="100%" height="100%" preserveAspectRatio="none">
+        <defs>
+          <mask id="tour-hole-mask">
+            <rect x="0" y="0" width="100%" height="100%" fill="white" />
+            {holes.map((h, i) => (
+              <rect key={i} x={h.left} y={h.top} width={h.width} height={h.height} rx={RADIUS} ry={RADIUS} fill="black" />
+            ))}
+          </mask>
+        </defs>
+        <rect x="0" y="0" width="100%" height="100%" fill="rgba(0,0,0,0.72)" mask="url(#tour-hole-mask)" />
+      </svg>
+      {holes.map((h, i) => (
         <div
-          className="tour-spot"
-          style={{
-            left: rect.left - pad,
-            top: rect.top - pad,
-            width: rect.width + pad * 2,
-            height: rect.height + pad * 2,
-          }}
+          key={i}
+          className="tour-ring"
+          style={{ left: h.left, top: h.top, width: h.width, height: h.height, borderRadius: RADIUS }}
         />
-      )}
+      ))}
       <div className={`tour-card${cardPlace === 'top' ? ' tour-card--top' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="tour-step-count">{step + 1} / {STEPS.length}</div>
         <h3 className="tour-title">{cur.title}</h3>
-        <p className="tour-text">{cur.text}</p>
+        <p className="tour-text">
+          {cur.text}
+          {cur.interactive && succeeded && <span className="tour-success"> Отлично!</span>}
+        </p>
         <div className="tour-actions">
           <button type="button" className="tour-skip" onClick={finish}>Пропустить</button>
           <div className="tour-nav-btns">
