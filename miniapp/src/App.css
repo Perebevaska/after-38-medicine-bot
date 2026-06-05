@@ -70,7 +70,9 @@
   gap: 10px;
   margin: 10px 12px 0;
   padding: 12px 14px;
-  min-height: 66px;
+  /* высота под 2 строки пожелания (15px×1.4×2 + padding) — карточка не «прыгает»
+     между 1- и 2-строчными пожеланиями; короткий текст центрируется по align-items */
+  min-height: 72px;
   background: var(--secondary-bg);
   border-radius: 12px;
 }
