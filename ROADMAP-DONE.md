@@ -158,3 +158,31 @@ v1 только `daily`; взаимоисключает с поприёмной 
 - Таблица `achievements(user_id, code, unlocked_at)` UNIQUE(user_id,code). DB: `count_total_taken`/`has_any_care_link`/`get_achievements`/`unlock_achievements`.
 - Ленивый анлок в `GET /stats/overview` → блок `achievements{catalog, unlocked, newly}`.
 - Фронт: `AchievementsCard` (грид 3-кол, тап → хинт) + `AchievementToast`. Бейджи на иконки меню (`App.tsx`, `NavBadge`): Аптечка = `course_done`, Прогресс = новые ачивки (`notifications.ts`), Настройки = pending-«Забота». Тесты `test_achievements.py`.
+
+---
+
+## Фаза 18 — Дизайн-полировка: раскатка design-v2 ✅ (2026-06-05)
+**design-v2 — единственный стиль.** `design.ts:applyDesign()` всегда вешает `body.design-v2`; нет localStorage-флага/`getDesignPref`. Тоггл «Классический/Новый вид» из `SettingsPage` удалён (блок «Внешний вид» = только тема auto/light/dark). Классическая base-CSS оставлена под скоупом как fallback. `.page-header-title`: 20px/700, `--link`.
+- **v2-CSS-блок** в конце `App.css` под `body.design-v2` (токены `--r-card/--r-btn/--sp-*/--dur/--ease/--elev/--hairline`). Типографика секций без капс, плавающие карточки (med/mlist/wish = bg+тень), кнопки (радиус+press-scale), seg-btn, glass на bottom-nav. `.settings-block` = `--secondary-bg`.
+- **Карточки раздельны по вкладкам:** Приёмы = `.mlist-card` (60/10·14); Аптечка = `.mlist-card--col` (геометрию задаёт только `.mlist-card-main` = `11px 14px`). Приёмы — время в строке названия `.mlist-name--withtime` (`Парацетамол · 09:00`). meal `any` = «Не зависит от еды».
+- **Поверхности:** карточки = `--v2-surface` (= `secondary-bg`; light темнее через `color-mix 92% #000`). `.mlist-list` = transparent/gap:0. Слайдер/`.skip-circle`/`.mlist-action-btn` → `--bg`. Обводки убраны у `.seg-btn`/`.field-input`/`.field-select` (TimePicker не трогаем).
+- **Навигация:** плавающая `bottom-nav` (12px, safe-area+10, h56, radius20, тень, bg97%+blur), без обводки. Активная = едущая pill (`--button-bg`, белая иконка) через `--nav-i`. Подписи убраны, иконки 23px, центрированная панель `--nav-item-w:60px`.
+- **WP1 Формы** ✅ — sticky «Сохранить», ритм секций, hairline.
+- **WP2 Dashboard** ✅ — `.section-title--now` точка `--accent`+пульс, due-pill, `.slide-fill` градиент, `.btn-take-all` press-scale.
+- **WP3 StatsPage** ✅ — единый `.stats-card`; токены `--ok/--warn/--bad`; график «по неделям» удалён.
+- **Курс:** плоско, близко к Telegram, на `themeParams`; не редизайн в чужую эстетику (iOS-скевоморфизм/Ubuntu-Yaru отброшены). Glass только на плавающих слоях. Реализация = token-first + scope-класс `.design-v2` (v1 в `:root`, v2 переопределяет); v2-стили ТОЛЬКО под `.design-v2`.
+
+## Фаза 15 v1 — Соцмеханика пожеланий ✅ (за тоглом)
+- **Ядро:** `wish_presets.py` · `api/routers/wishes.py` (status/send/inbox/react) · `wishes_sent`. Отправка → random получатель excl self → inbox. Получатель видит `WishZone` на Dashboard (👍 Помогло / ❤️ Очень поддержало).
+- **Обратная связь (2 слоя):** (1) in-app всегда — карточка «вашу поддержку оценили: 👍N ❤️M» (`/wishes/status` → `ack_helped/ack_supported`); (2) TG-дайджест за тоглом `wishes_tg_notify` (default OFF) — 1/день в `WISH_DIGEST_TIME=20:00` через `scheduler._send_wish_digests`. Мгновенного пуша на реакцию НЕТ.
+- **Тематика по времени:** `presets_for_hour(hour)` в TZ юзера.
+- **Антифрод:** `WISH_DAILY_LIMIT=20`, only-presets (422), rate-limit. Гейт пула `WISH_MIN_POOL=2`.
+- Тогл «Слова поддержки (тест)»; очистка `wishes_sent` в `delete_user_data`.
+
+## Аудит фронтенда 2026-06-05 — баги/мёртвый код ✅
+✅ B1–B4 + D1–D3, D5 (коммит `e5309c5`). D4 (поллинг) оставлен осознанно — гейт по pending сломал бы появление бейджа нового запроса.
+- **B1** Бейдж «Аптечка»: `m.course_total != null && (m.course_done ?? 0) >= m.course_total` (как `courseComplete` в `MedicationList.tsx`).
+- **B2** «Принять всё» метило чужие секции — метить только own-due в `setQueryData`.
+- **B3** `DOMMatrixReadOnly('none')` guard: `t === 'none' ? 0 : ...m41`.
+- **B4** Док-дрейф: механика = `SlideToConfirm`, не HoldButton.
+- **D1** 6 stock-хуков снесены (`useStock`/`useSetStock`/...). **D2** `useWeekStats`+`WeekStatRow` снесены. **D3/D5** подчищены.
