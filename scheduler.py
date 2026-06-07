@@ -35,6 +35,18 @@ CATCHUP_MIN = 5
 
 # (telegram_id, medication_id, reminder_time) -> datetime (UTC) последней отправки
 _pending: dict = {}
+# (telegram_id, medication_id, reminder_time) -> datetime (UTC) ПЕРВОЙ отправки
+# в текущем цикле повтора. Окно repeat считается от него; _pending же освежается
+# каждой отправкой (для паузы 300с). Раньше окно считалось от _pending → каждый
+# повтор сбрасывал отсчёт, и условие остановки `>= repeat_window` было недостижимо
+# (повтор шёл вечно каждые ~5 мин). См. фикс «repeat не выключается».
+_repeat_anchor: dict = {}
+# (telegram_id, medication_id, reminder_time, date_iso) — слоты, отмеченные сегодня
+# (taken/skipped через TG-кнопку или строгий режим). Подавляет и догон, и повтор:
+# раньше callback просто pop'ил _pending, и догон в окне CATCHUP_MIN пере-отправлял
+# напоминание (юзер жмёт «принял» → через минуту приходит снова). См. фикс «догон
+# пере-взводит напоминание после отметки».
+_marked_today: set = set()
 # (telegram_id, date_iso) — пользователи, которым план дня уже отправлен сегодня
 _daily_plan_sent: set = set()
 
@@ -68,6 +80,10 @@ def _load_state():
             data = json.loads(raw)
             for tid, med, t, iso in data.get("pending", []):
                 _pending[(tid, med, t)] = datetime.fromisoformat(iso)
+            for tid, med, t, iso in data.get("repeat_anchor", []):
+                _repeat_anchor[(tid, med, t)] = datetime.fromisoformat(iso)
+            for tid, med, t, d in data.get("marked_today", []):
+                _marked_today.add((tid, med, t, d))
             for tid, d in data.get("daily_plan_sent", []):
                 _daily_plan_sent.add((tid, d))
             for tid, d in data.get("wish_digest_sent", []):
@@ -82,6 +98,8 @@ def _save_state():
     try:
         data = {
             "pending": [[k[0], k[1], k[2], ts.isoformat()] for k, ts in _pending.items()],
+            "repeat_anchor": [[k[0], k[1], k[2], ts.isoformat()] for k, ts in _repeat_anchor.items()],
+            "marked_today": [[k[0], k[1], k[2], k[3]] for k in _marked_today],
             "daily_plan_sent": [[k[0], k[1]] for k in _daily_plan_sent],
             "wish_digest_sent": [[k[0], k[1]] for k in _wish_digest_sent],
         }
@@ -94,6 +112,8 @@ def clear_pending_for_medication(medication_id: int):
     """Удаляет все pending-записи для указанного лекарства (вызывается при деактивации)."""
     for key in [k for k in _pending if k[1] == medication_id]:
         del _pending[key]
+    for key in [k for k in _repeat_anchor if k[1] == medication_id]:
+        del _repeat_anchor[key]
 
 
 def _prune_pending(now_utc: datetime):
@@ -101,6 +121,13 @@ def _prune_pending(now_utc: datetime):
     cutoff = now_utc - timedelta(seconds=43200)
     for key in [k for k, ts in _pending.items() if ts < cutoff]:
         del _pending[key]
+    # Якорь без живого _pending не нужен (плюс защита от утечки по времени).
+    for key in [k for k, ts in _repeat_anchor.items() if k not in _pending or ts < cutoff]:
+        del _repeat_anchor[key]
+    # _marked_today: держим только сегодня/вчера (локальные даты ±1 от UTC).
+    day_cutoff = (now_utc.date() - timedelta(days=2)).isoformat()
+    for key in [k for k in _marked_today if k[3] < day_cutoff]:
+        _marked_today.discard(key)
 
 
 async def send_reminders(app):
@@ -137,6 +164,13 @@ async def _send_reminders_impl(app):
         if not _rule_fires_today(row, now_local.date()):
             continue
 
+        # Слот уже отмечен сегодня (TG-кнопка / строгий режим) → не напоминаем
+        # повторно. Гасит и догон, и повтор, не завися от _pending.
+        if (key[0], key[1], key[2], now_local.date().isoformat()) in _marked_today:
+            _pending.pop(key, None)
+            _repeat_anchor.pop(key, None)
+            continue
+
         # AX4: окно догона вместо точного «== ЧЧ:ММ». Если проход планировщика
         # задержался/пропустил минуту (GC, медленный запрос, рестарт), once-слот
         # всё равно сработает в пределах CATCHUP_MIN минут после своего времени.
@@ -154,12 +188,17 @@ async def _send_reminders_impl(app):
         if not already and 0 <= since <= CATCHUP_MIN:
             should_send = True  # первая отправка: точная минута ИЛИ догон после пропуска
         elif row["reminder_mode"] == "repeat" and already:
-            elapsed = (now_utc - _pending[key]).total_seconds()
+            # Окно повтора считаем от ПЕРВОЙ отправки (anchor), пауза между
+            # повторами — от последней (_pending). Раньше окно мерялось от
+            # _pending, который освежался каждым повтором → отсчёт сбрасывался,
+            # `>= repeat_window` не достигалось, повтор шёл вечно.
+            anchor = _repeat_anchor.get(key, _pending[key])
             repeat_window = ((row.get("reminder_repeat_hours") or 2) * 60 + (row.get("reminder_repeat_minutes") or 0)) * 60
-            if 300 <= elapsed < repeat_window:
-                should_send = True
-            elif elapsed >= repeat_window:
+            if (now_utc - anchor).total_seconds() >= repeat_window:
                 _pending.pop(key, None)
+                _repeat_anchor.pop(key, None)
+            elif (now_utc - _pending[key]).total_seconds() >= 300:
+                should_send = True
 
         if not should_send:
             continue
@@ -186,6 +225,7 @@ async def _send_reminders_impl(app):
                 track_key=track_key,
             )
             _pending[key] = now_utc
+            _repeat_anchor.setdefault(key, now_utc)  # фикс окна повтора: anchor = первая отправка
             sent += 1
         except Exception as e:
             logger.error("Ошибка постановки в очередь: %s", e)
@@ -389,6 +429,10 @@ async def _apply_strict_autoskip(schedules):
             )
             await asyncio.to_thread(apply_intake_hearts, r["user_id"], "skipped", None)
             statuses[key] = "skipped"
+            # Гасим напоминания по этому слоту на сегодня (как и ручная отметка).
+            _marked_today.add((tid, r["medication_id"], r["reminder_time"], today.isoformat()))
+            _pending.pop((tid, r["medication_id"], r["reminder_time"]), None)
+            _repeat_anchor.pop((tid, r["medication_id"], r["reminder_time"]), None)
             dep = f" ({escape_html(r['dependent_name'])})" if r["dependent_name"] else ""
             try:
                 await _arq_pool.enqueue_job(
@@ -471,6 +515,11 @@ async def handle_intake_callback(update, context):
 
     key = (telegram_id, medication_id, scheduled_time)
     _pending.pop(key, None)
+    _repeat_anchor.pop(key, None)
+    # Помечаем слот отмеченным на сегодня — чтобы догон/повтор не пере-взвели
+    # напоминание в окне CATCHUP_MIN после отметки.
+    _marked_today.add((telegram_id, medication_id, scheduled_time,
+                       datetime.now(user_tz).date().isoformat()))
 
     if status == "taken":
         await query.edit_message_text("✅ Отлично! Приём записан.")
